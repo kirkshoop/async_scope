@@ -49,29 +49,23 @@ The requirements for the async scope are:
  - An `async_scope` must forward cancellation to all spawned senders.
  - An `async_scope` must provide a sender that completes when all spawned senders are complete.
 
-Async scope defines three additional concepts:
+Async scope defines an additional concept:
 
- - An `async_storage_provider` that supports asynchronous memory allocation.
- - A `storage_sender` that is a sender of either `void` or a `future_sender`. The `storage_sender` completes when storage is allocated by the `async_storage_provider`.
  - A `future_sender` that represents a potentially eagerly executing `sender`.
 
 
 ## Definitions
 
 ```cpp
-template<typename async_storage_provider>
 struct async_scope {
     ~async_scope();
-    explicit async_scope(async_storage_provider);
-
     async_scope(const async_scope&) = delete;
     async_scope(async_scope&&) = delete;
     async_scope& operator=(const async_scope&) = delete;
     async_scope& operator=(async_scope&&) = delete;
 
-    auto spawn(sender) const&->storage_sender<>;
-    auto spawn_now(sender) const&->void;
-    auto spawn_future(sender) const&->storage_sender<future_sender<Values…>>;
+    auto spawn(sender) const&->void;
+    auto spawn_future(sender) const&->future_sender<Values…>;
 
     auto empty() const&->empty_sender;
 
@@ -81,11 +75,6 @@ struct async_scope {
 };
 
 
-template<class S, class... Ts>
-concept storage_sender = sender_of<S, Ts...>;
-
-struct async_storage_provider; // see below
-
 template<class... Ts>
 struct future_sender; // see below;
 ```
@@ -94,42 +83,27 @@ struct future_sender; // see below;
 
 An `async_scope` object must outlive work that is spawned on it. It should be viewed as owning the storage for that work.
 The `async_scope` may be constructed in a local context, matching syntactic scope or the lifetime of surrounding algorithms.
-The destructor of the `async_scope` will terminate if there is oustanding work in the scope at descrution time, therefore `empty` must be called before the `async_scope` object is destroyed.
+The destructor of the `async_scope` will terminate if there is outstanding work in the scope at destruction time, therefore `empty` must be called before the `async_scope` object is destroyed.
 
 ## spawn
 
-`spawn(sender) const&->storage_sender<>;`
+`spawn(sender) const&->void;`
 
-Lazily launches work on the `async_scope` with support for limited storage.
+Eagerly launches work on the `async_scope`. 
 
-When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S>` and that does not complete inline with the call to `start()` returns a `storage_sender<>` that completes with `void` when the result of `construct(s)` on the Async Scope's `async_storage_provider` completes and `s` has been started. `s` is guaranteed not to start until `start()` is called on the returned `storage_sender<>`. `s` is guaranteed to have started by the time the `storage_sender` completes successfully, and is guaranteed not to have been started if the `storage_sender` completes with `set_done` or `set_error`.
-
-This allows bounded calls to spawn() to apply back-pressure. For example: `spawn(..).repeat_effect_until(..)` will only spawn the next sender once the previous sender has been started.
-
-Cancelling the returned `storage_sender<>` only cancels `s`, if started, or the allocation if not. Cancelling the `storage_sender` does not cancel the entire `async_scope`.
-
-## spawn_now
-
-`spawn_now(sender) const&->void;`
-
-Eagerly launches work on the `async_scope` while blocking until storage is available and the sender has been started (although not necessarily until the sender is actively running).
-
-When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S>` and that does not compelete inline with the call to `start()`, `spawn_now(s)` is equivalent to `std::this_thread::sync_wait(spawn(s));`
+When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S>` and that does not complete inline with the call to `start()` returns `void`. `s` is guaranteed to `start()`, if allocation of the `operation_state` succeeds. `s` is not required to `start()` before `spawn()` returns. 
 
 ## spawn_future
 
-`spawn_future(sender) const&->storage_sender<future_sender<Values…>>;`
+`spawn_future(sender) const&->future_sender<Values…>;`
 
-Lazily allocates capacity and launches work on the `async_scope` but returns a `future_sender` that represents an eagerly running task.
+Eagerly launches work on the `async_scope` but returns a `future_sender` that represents an eagerly running task.
 
-When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S, Values...>` and that does not complete inline with the call to `start()` returns a `storage_sender<future_sender<Values...>` that completes with a `future_sender<Values...>`, `f`, when the result of `construct(s)` on the Async Scope's `async_storage_provider` completes and `s` has been started. `s` is guaranteed not to start until `start()` is called on the returned `storage_sender<>`. `s` is guaranteed to have started by the time the `storage_sender` completes successfully, and is guaranteed not to have been started if the `storage_sender` completes with `set_done` or `set_error`.
+When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S, Values...>` and that does not complete inline with the call to `start()` returns a `future_sender<Values...>`
 
-This allows bounded calls to spawn() to apply back-pressure. For example: `spawn_future(..).repeat_effect_until(..)` will only spawn the next sender once the previous sender has been started.
+It is safe to drop `f` without starting it because the `async_scope` safely manages the lifetime of the running work. `future_sender<>` `start()` is in a race with the completion of the sender, `s`, that has already been started. The race will be resolved by the `future_sender<>` state. 
 
-`future_sender<Values...>` `f` completes when `s` completes, with the values passed by `s`. `s` will have been started by the time `f` is returned. It is safe to drop `f` without starting it because the `async_scope` safely manages the lifetime of the running work. `future_sender<>` `start()` is in a race with the completion of the sender that has already been started. The race will be resolved by the `future_sender<>` state. Storage for the `future_sender<>` state can be reserved in the original storage.
-
-Cancelling the returned `storage_sender<future_sender<Values...>>` only cancels `s`, if started, or the allocation if not. Cancelling the `storage_sender` does not cancel the entire `async_scope`.
-Cancelling the `future_sender<Values...>` passed on the value channel of the `storage_sender` cancels `s`.
+Cancelling the `future_sender<Values...>`, `f`, cancels `s` and does not cancel the `async_scope`.
 
 ## empty detection
 
@@ -159,7 +133,7 @@ Returns the `stop_token` associated with the `async_scope`. This will report sto
 
 `get_stop_source() & ->stop_source;`
 
-Returns a `stop_source` associated with the `async_scope`'s `stop_token`. This `stop_source` will trigger the `stop_token`, and will caused future calls to `spawn` and `spawn_future` to not allocate capacity or start the passed sender and for the returned `storage_sender` to complete with `set_done`. Future calls to `spawn_now` will silently drop the passed `sender`.
+Returns a `stop_source` associated with the `async_scope`'s `stop_token`. This `stop_source` will trigger the `stop_token`, and will caused future calls to `spawn` and `spawn_future` to not start the passed sender. Future calls to `spawn_now` will silently drop the passed `sender`.
 
 Calling `request_stop` on the returned `stop_source` will not cancel senders spawned on the `async_scope` except where the algorithms explicitly used the scope's `stop_source`.
 
@@ -168,76 +142,6 @@ Calling `request_stop` on the returned `stop_source` will not cancel senders spa
 
 Stops the `async_scope` inline. Equivalent to calling `get_stop_source().request_stop()`.
 
-
-Async Storage
-=============
-
-The elephant in the room. What is AsyncStorage?
-
-## What is async storage?
-
-In resource constrained environments, it is important to limit resource consumption. Limits on consumption of memory, IO, compute, etc.. are all important. It turns out that all of these limits can be expressed in terms of async storage. IO needs storage for buffers, memory is storage and compute needs storage for `operation_state`.
-
-Sometimes these limits are artificial. AsyncStorage can represent a fixed size storage that was reserved at compile-time. This allows storage without a runtime allocator.
-
-Parameterizing an `async_scope` object on an AsyncStorage object allows these limits to be applied to the `async_scope`. This might be done to limit concurrency in that scope, or to eliminate allocations.
-
-There are async storage objects that have no fixed limits. An async storage object that directly wraps a runtime allocator is a default that would add no overhead (the senders would be always-inline).
-
-## How does async storage solve all these limits?
-
-Limits in runtime allocators today are represented as an out of memory error. This is an expression of the intent for allocation failure to be rare and unexpected.
-
-When an allocator has a limit that is expected and frequent, representing out of memory as an error is harmful. Such an allocator could decide to block until the allocation can be satisfied. This blocking behaviour is also harmful.
-
-An async storage object will allow an implementation to represent out of memory as an error (this is useful for directly wrapping existing allocators), or as a non-blocking async operation that completes when the storage can be satisfied.
-
-An object that has `get_storage_provider() const&` will return an object that can be used with `get_storage<T>()`. `get_storage<T>()` will return an object that cannot be copied or moved - because it may actually contain the limited storage for `T`. The object returned from `get_storage<T>()` supports `storage_sender construct(AN...)` - where `storage_sender` completes with a `storage-ref-T` - and `destruct_sender destruct(storage-ref-T)`
-
-## Definitions
-
-```cpp
-template<typename T>
-struct async_storage_ref {
-    auto get() -> T&;
-};
-```
-
-```cpp
-template<typename T>
-struct async_storage {
-    ~async_storage();
-
-    using ref_type = async_storage_ref<T>;
-
-    async_storage(const async_storage&) = delete;
-    async_storage(async_storage&&) = delete;
-    async_storage& operator=(const async_storage&) = delete;
-    async_storage& operator=(async_storage&&) = delete;
-
-    template<typename... AN>
-    auto construct(AN&&...) -> ref_type-sender;
-
-    auto destruct(ref_type) -> destruct-sender;
-};
-```
-
-```cpp
-struct async_storage_provider {
-    ~async_storage_provider();
-
-    using any_ref_type = type-erased-ref;
-
-    template<typename T>
-    auto get_storage_for() -> async_storage<T>;
-};
-```
-
-```cpp
-struct context-provider {
-    auto get_storage_provider() -> async_storage_provider;
-};
-```
 
 Examples of use
 ===============
