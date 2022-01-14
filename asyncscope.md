@@ -89,9 +89,9 @@ The destructor of the `async_scope` will terminate if there is outstanding work 
 
 `spawn(sender) const&->void;`
 
-Eagerly launches work on the `async_scope`. 
+Eagerly launches work on the `async_scope`.
 
-When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S>` and that does not complete inline with the call to `start()` returns `void`. `s` is guaranteed to `start()`, if allocation of the `operation_state` succeeds. `s` is not required to `start()` before `spawn()` returns. 
+When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S>` and that does not complete inline with the call to `start()` returns `void`. `s` is guaranteed to `start()`, if allocation of the `operation_state` succeeds. `s` is not required to `start()` before `spawn()` returns.
 
 ## spawn_future
 
@@ -101,7 +101,7 @@ Eagerly launches work on the `async_scope` but returns a `future_sender` that re
 
 When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S, Values...>` and that does not complete inline with the call to `start()` returns a `future_sender<Values...>`
 
-It is safe to drop `f` without starting it because the `async_scope` safely manages the lifetime of the running work. `future_sender<>` `start()` is in a race with the completion of the sender, `s`, that has already been started. The race will be resolved by the `future_sender<>` state. 
+It is safe to drop `f` without starting it because the `async_scope` safely manages the lifetime of the running work. `future_sender<>` `start()` is in a race with the completion of the sender, `s`, that has already been started. The race will be resolved by the `future_sender<>` state.
 
 Cancelling the `future_sender<Values...>`, `f`, cancels `s` and does not cancel the `async_scope`.
 
@@ -145,3 +145,79 @@ Stops the `async_scope` inline. Equivalent to calling `get_stop_source().request
 
 Examples of use
 ===============
+
+Using a global `async_scope` in combination with a `system_context` from [@p2079] so spawn work from within a task and join it later:
+```c++
+using namespace std::execution;
+
+system_context ctx;
+int result = 0;
+
+{
+  async_scope scope;
+  scheduler auto sch = ctx.scheduler();
+
+  sender auto val = on(
+    sch, just() | then([sch, &scope](auto sched) {
+
+        int val = 13;
+
+        auto print_sender = just() | then([val]{
+          std::cout << "Hello world! Have an int with value: " << val << "\n";
+        });
+        // spawn the print sender on sched to make sure it
+        // completes before shutdown
+        scope.spawn(on(sch, std::move(print_sender)));
+
+        return val;
+    })
+  ) | then([&result](auto val){result = val});
+
+  scope.spawn(std::move(val));
+
+
+  // Safely wait for all nested work
+  this_thread::sync_wait(scope.empty());
+};
+
+// The scope ensured that all work is safely joined, so result contains 13
+std::cout << "Result: " << result << "\n";
+
+// and destruction of the context is now safe
+```
+
+In this example we use the `async_scope` within lexical scope to construct an algorithm that performs parallel work.
+This uses the [`let_value_with`](https://github.com/facebookexperimental/libunifex/blob/main/doc/api_reference.md#let_value_withinvocable-state_factory-invocable-func---sender) algorithm implemented in [libunifex](https://github.com/facebookexperimental/libunifex/) which simplifies in-place construction of a non-moveable object in the `let_value_with` algorithms operation state.
+Here foo launches 100 tasks that concurrently run on some scheduler provided to `foo` through its connected receiver, and then asynchronously joined.
+In this case the context the work is run on will be the `system_context`'s scheduler, from [@p2079].
+This structure emulates how we might build a parallel algorithm where each `some_work` might be operating on a fragment of data.
+```c++
+using namespace std::execution;
+
+auto foo(sender auto input) {
+  auto l = let_value(
+    when_all(
+      std::move(input),
+      get_scheduler()),
+    [](auto val, auto sch) {
+      return sch.schedule() |
+        then([](){std::cout << "Before tasks launch\n";}) |
+        let_value_with(
+          [](){return async_scope{};},
+          [&sch](async_scope& scope){
+            for(int i = 0; i < 100; ++0) {
+              scope.spawn(on(sch, some_work()));
+            }
+            return scope.empty() | then([](){std::cout << "After tasks complete\n";});
+          });
+    }
+  )
+}
+
+void bar() {
+  system_context ctx;
+  // Provide the system context scheduler to start the work and propagate
+  // through receiver queries
+  this_thread::sync_wait(on(ctx.scheduler(), foo()));
+}
+```
