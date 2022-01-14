@@ -83,7 +83,7 @@ struct future_sender; // see below;
 
 An `async_scope` object must outlive work that is spawned on it. It should be viewed as owning the storage for that work.
 The `async_scope` may be constructed in a local context, matching syntactic scope or the lifetime of surrounding algorithms.
-The destructor of the `async_scope` will terminate if there is outstanding work in the scope at destruction time, therefore `empty` must be called before the `async_scope` object is destroyed.
+The destructor of the `async_scope` will terminate if there is outstanding work in the scope at destruction time, therefore `empty` **must** be called before the `async_scope` object is destroyed.
 
 ## spawn
 
@@ -91,7 +91,9 @@ The destructor of the `async_scope` will terminate if there is outstanding work 
 
 Eagerly launches work on the `async_scope`.
 
-When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S>` and that does not complete inline with the call to `start()` returns `void`. `s` is guaranteed to `start()`, if allocation of the `operation_state` succeeds. `s` is not required to `start()` before `spawn()` returns.
+When passed a valid `sender` `s` of type `S`, that satisfies `sender_of<S>` and that does not complete inline with the call to `start()` returns `void`.
+`s` is guaranteed to `start()` if allocation of the `operation_state` succeeds.
+`s` is not required to `start()` before `spawn()` returns.
 
 ## spawn_future
 
@@ -109,7 +111,10 @@ Cancelling the `future_sender<Values...>`, `f`, cancels `s` and does not cancel 
 
 `empty() const&->empty_sender;`
 
-empty_sender completes with void when all spawned senders have completed and no senders are in flight in the `async_scope`. An `async_scope` can be empty more than once. The intended usage is to spawn all the senders and then start the empty_sender to know when all spawned senders have completed. Another supported usage is to use request_stop on async_scope to prevent further senders from being spawned, and then start the empty_sender.
+`empty_sender` completes with `void` when all spawned senders have completed and no senders are in flight in the `async_scope`.
+An `async_scope` can be empty more than once.
+The intended usage is to spawn all the senders and then start the empty_sender to know when all spawned senders have completed.
+Another supported usage is to use `request_stop` on async_scope to prevent further senders from being spawned, and then start the `empty_sender`.
 
 To safely destroy the `async_scope` object the `async_scope` must be stopped either through its `stop_source` via `get_stop_source()` or through a call to `request_stop()`, to prevent more work being spawned, then the `async_scope` must be left to drain.
 
@@ -135,7 +140,7 @@ Returns the `stop_token` associated with the `async_scope`. This will report sto
 
 Returns a `stop_source` associated with the `async_scope`'s `stop_token`. This `stop_source` will trigger the `stop_token`, and will caused future calls to `spawn` and `spawn_future` to not start the passed sender. Future calls to `spawn_now` will silently drop the passed `sender`.
 
-Calling `request_stop` on the returned `stop_source` will not cancel senders spawned on the `async_scope` except where the algorithms explicitly used the scope's `stop_source`.
+Calling `request_stop` on the returned `stop_source` will not cancel senders spawned on the `async_scope` except where the algorithms explicitly used the scope's `stop_token`.
 
 
 `request_stop() & ->void;`
