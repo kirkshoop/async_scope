@@ -24,7 +24,7 @@ Changes
 Introduction
 ============
 
-A major precept of [@P2300R2] is structured concurrency. The `start_detached` and `ensure_started` algorithms are motivated by some important scenarios. Not every asynchronous operation has a clear chain of work to consume or block on the result. The problem with these algorithms is that they provide unstructured concurrency. This is an unnecessary and unwelcome and undesirable property for concurrency. It leads to problems with lifetimes, and it requires execution contexts to conflate task lifetime management with execution management.
+A major precept of [@P2300R4] is structured concurrency. The `start_detached` and `ensure_started` algorithms are motivated by some important scenarios. Not every asynchronous operation has a clear chain of work to consume or block on the result. The problem with these algorithms is that they provide unstructured concurrency. This is an unnecessary and unwelcome and undesirable property for concurrency. It leads to problems with lifetimes, and it requires execution contexts to conflate task lifetime management with execution management.
 
 This paper describes an object that would be used to create a scope that will contain all senders spawned within its lifetime. These senders can be running on any execution context. The scope object has only one concern, which is to contain the spawned senders to a lifetime that is nested within any other resources that they depend on. In order to be useful within other asynchronous scopes, the object must not have any blocking functions. In practice, this means the scope serves three purposes. It:
 
@@ -151,7 +151,7 @@ Stops the `async_scope` inline. Equivalent to calling `get_stop_source().request
 Examples of use
 ===============
 
-Using a global `async_scope` in combination with a `system_context` from [@p2079] so spawn work from within a task and join it later:
+Using a global `async_scope` in combination with a `system_context` from [@P2079R2] so spawn work from within a task and join it later:
 ```c++
 using namespace std::execution;
 
@@ -194,7 +194,7 @@ std::cout << "Result: " << result << "\n";
 In this example we use the `async_scope` within lexical scope to construct an algorithm that performs parallel work.
 This uses the [`let_value_with`](https://github.com/facebookexperimental/libunifex/blob/main/doc/api_reference.md#let_value_withinvocable-state_factory-invocable-func---sender) algorithm implemented in [libunifex](https://github.com/facebookexperimental/libunifex/) which simplifies in-place construction of a non-moveable object in the `let_value_with` algorithms operation state.
 Here foo launches 100 tasks that concurrently run on some scheduler provided to `foo` through its connected receiver, and then asynchronously joined.
-In this case the context the work is run on will be the `system_context`'s scheduler, from [@p2079].
+In this case the context the work is run on will be the `system_context`'s scheduler, from [@P2079R2].
 This structure emulates how we might build a parallel algorithm where each `some_work` might be operating on a fragment of data.
 ```c++
 using namespace std::execution;
