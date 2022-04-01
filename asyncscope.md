@@ -36,6 +36,94 @@ This object would be used to spawn senders without waiting for each sender to co
 
 The general concept of an async scope to manage work has been deployed broadly in [folly](https://github.com/facebook/folly/blob/main/folly/experimental/coro/AsyncScope.h) to safely launch awaitables in folly's [coroutine library](https://github.com/facebook/folly/tree/main/folly/experimental/coro) and in [libunifex](https://github.com/facebookexperimental/libunifex/blob/main/include/unifex/async_scope.hpp) where it is designed to be used with the sender/receiver pattern.
 
+Motivation
+==========
+
+## Motivating example
+
+Let us assume the following code:
+
+```c++
+namespace ex = std::execution;
+
+struct work_context;
+auto do_work(work_context, work_item*) -> void;
+
+auto parallel_work(const std::vector<work_item*>& items) -> void {
+    static_thread_pool my_pool{8};
+    work_context ctx;
+    for ( auto item: items ) {
+        ex::sender auto snd = ex::transfer_just(my_pool.get_scheduler(), item)
+                            | ex::then([&](work_item* item){ do_work(ctx, item); });
+        ex::start_detached(std::move(snd));
+    }
+    // maybe more work here...
+    // `ctx` and `my_pool` is destroyed
+}
+```
+
+In this example we are creating parallel work based on the given input vector.
+All the work will be spawned in the context of a local `static_thread_pool` object, and will use a shared `work_context` object.
+
+Because the number of work items is dynamic, one is forced to use `start_detached()` from [@P2300R4] (or something equivalent) to dynamically spawn work.
+[@P2300R4] doesn't provide any facilities to spawn dynamic work and return a sender (i.e., something like `when_all` but with a dynamic number of input senders).
+
+Using `start_detached()` here follow the *fire-and-forget* style, meaning that we have no control over the termination of the work being started.
+We don't have control over the lifetime of the operation being started.
+
+At the end of the function, we are destroying the work context and the thread pool.
+But at that point, we don't know whether all the operations have completed.
+If there are still operations that are not yet complete, this might lead to crashes.
+
+[@P2300R4] doesn't give us out-of-the-box facilities to use in solving these types of problems.
+
+This paper proposes the `async_scope` facility that would help us avoid the invalid behavior.
+With it, one might write a safe code this way:
+```c++
+auto parallel_work(const std::vector<work_item*>& items) -> void {
+    static_thread_pool my_pool{8};
+    work_context ctx;
+    async_scope my_work_scope;                  // NEW!
+    for ( auto item: items ) {
+        ex::sender auto snd = ex::transfer_just(my_pool.get_scheduler(), item)
+                            | ex::then([&](work_item* item){ do_work(ctx, item); });
+        my_work_scope.spawn(std::move(snd));   // MODIFIED!
+    }
+    // maybe more work here...
+    ex::sync_wait(my_work_scope.empty());      // NEW!
+    // `ctx` and `my_pool` can now safely be destroyed
+}
+```
+
+The newly introduced `async_scope` object allows us to control the lifetime of the dynamic work we are spawning.
+We can wait for all the work that we spawn to be complete before we destruct the objects used by the parallel work.
+
+
+## Step forward towards Structured Concurrency
+
+Structured Programming [@Dahl72] transformed the software world by making it easier to reason about the code, and build large software from simpler constructs.
+We want to achieve the same effect on concurrent programming by ensuring that we *structure* our concurrency code.
+[@P2300R4] makes a big step in that direction, but, by itself, it doesn't fully realize the principles of Structured Programming.
+More specifically, it doesn't always ensure that we can apply the *single entry, single exit point* principle. 
+
+The `start_detached` sender algorithm fails this principle by behaving like a `GOTO` instruction.
+By calling `start_detached` we essentially continue in two places: in the same function, and on different thread that executes the given work.
+Moreover, the lifetime of the work started by `start_detached` cannot be bound to the local context.
+This will prevent local reasoning, thus will make the program harder to understand.
+
+To properly structure our concurrency, we need an abstraction that ensures that all the work being started has a proper lifetime guarantee.
+This is the goal of `async_scope`.
+
+## Intel criticism on P2300
+
+Although [@P2300R4] is generally considered a strong improvement on concurrency in C++, Intel voted against introducing this into the C++ standard.
+The main reason for this negative vote is the absence of a feature like `async_scope`.
+
+This paper wants to fix this issue.
+
+TODO: better formulation
+
+
 Async Scope
 ===========
 
@@ -226,3 +314,18 @@ void bar() {
   this_thread::sync_wait(on(ctx.scheduler(), foo()));
 }
 ```
+---
+references:
+  - id: Dahl72
+    citation-label: Dahl72
+    type: book
+    title: "Structured Programming"
+    author:
+      - family: Dahl
+        given: O.-J.
+      - family: Dijkstra
+        given: E. W.
+      - family: Hoare
+        given: C. A. R.
+    publisher: Academic Press Ltd., 1972
+---
