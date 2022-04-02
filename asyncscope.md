@@ -314,6 +314,135 @@ void bar() {
   this_thread::sync_wait(on(ctx.scheduler(), foo()));
 }
 ```
+
+Specification
+=============
+
+## Synopsis
+
+```c++
+namespace std::execution {
+
+namespace { // exposition only 
+    struct async_scope_receiver { // exposition only
+        friend auto set_value(async_scope_receiver) noexcept -> void;
+        template <typename E>
+        friend auto set_error(async_scope_receiver, E) noexcept -> void;
+        friend auto set_stopped(async_scope_receiver) noexcept -> void;
+    };
+    template <typename S>
+    struct future_sender; // exposition only
+    struct empty_sender { // exposition only
+        using completion_signatures =
+            execution::completion_signatures<
+                execution::set_value_t()
+            >;
+    };
+}
+
+struct async_scope {
+    ~async_scope();
+    async_scope(const async_scope&) = delete;
+    async_scope(async_scope&&) = delete;
+    async_scope& operator=(const async_scope&) = delete;
+    async_scope& operator=(async_scope&&) = delete;
+
+    template <sender_to<async_scope_receiver> S>
+    auto spawn(S&& snd) -> void;
+    template <sender_to<async_scope_receiver> S>
+    auto spawn_future(S&& snd) -> future_sender<S>;
+
+    [[nodiscard]]
+    auto empty() const noexcept -> empty_sender;
+    
+    auto get_stop_source() noexcept -> in_place_stop_source&;
+    auto get_stop_token() const noexcept -> in_place_stop_token;
+    auto request_stop() noexcept -> void;
+};
+
+}
+```
+
+## `async_scope::~async_scope`
+
+1. `async_scope::~async_scope` destructs the `async_scope` object, freeing all resources
+
+2. The destructor will call `terminate()` if there is outstanding work in the `async_scope` object (i.e., work created by `spawn()` and `spawn_future()` did not complete).
+
+3. *Note*: It is always safe to call the destructor after the sender returned by `empty()` sent the completion signal, provided that there were no calls to `spawn()` and `spawn_future()` since `empty()` was called, or stop was requested on our stop source before any of these `spawn()` and `spawn_future()` calls.
+
+
+## `async_scope::spawn`
+
+1. `async_scope::spawn` is used to eagerly start a sender while keeping the execution in the lifetime of the `async_scope` object.
+2. *Effects*:
+   - An `operation_state` object `op` will be created by connecting the given sender to a receiver `recv` of type `async_scope_receiver`.
+   - If an exception occurs will be trying to create `op` in its proper storage space, the exception will be passed to the caller.
+   - If no exception is thrown while creating `op` and stop was not requested on our stop source, then:
+     - `start(op)` is called.
+     - The lifetime of `op` extends at least until `recv` is called with a completion notification.
+     - If the given work calls `set_error()` on `recv` then `std::terminate()` will be called.
+3. *Note*: the receiver will help the `async_scope` object to keep track of how many operations are running at a given time. 
+
+## `async_scope::spawn_future`
+
+1. `async_scope::spawn_future` is used to eagerly start a sender in the context of the `async_scope` object, and returning a sender that will be triggered after the completion of the given sender.
+    The lifetime of the returned sender is not associated with `async_scope`.
+
+2. The returned sender has the same completion signatures as the input sender.
+
+3. *Effects*:
+   - An `operation_state` object `op` will be created by connecting the given sender to a receiver `recv`.
+   - If an exception occurs will be trying to create `op` in its proper storage space, the exception will be passed to the caller.
+   - If no exception is thrown while creating `op` and stop was not requested on our stop source, then:
+     - `start(op)` is called.
+     - The lifetime of `op` extends at least until `recv` is called with a completion notification.
+     - If `rsnd` is the returned sender, then using it has the following effects:
+       - Let `ext_op` be the `operation_state` object returned by connecting `rsnd` to a receiver `ext_recv`.
+       - If `ext_op` is started, the completion notifications received by `recv` will be forwarded to `ext_recv`, regardless whether the completion notification happened before starting `ext_op` or not.
+       - It is safe not to connect `rsnd` or not to start `ext_op`.
+
+4. *Note*: the receiver `recv` will help the `async_scope` object to keep track of how many operations are running at a given time.
+
+5. *Note*: the type of completion signal that `op` will use does not influence the behavior of `async_scope` (i.e., `async_scope` object behaves the same way if the sender describes a work that ends with success, error or cancellation).  
+
+6. *Note*: cancelling the sender returned by this function will not have an effect about the `async_scope` object.  
+
+
+
+## `async_scope::empty`
+
+1. `async_scope::empty` returns a sender that can be used to get notifications when all the work belonging to the `async_scope` object is completed.
+
+2. *Effects*:
+   - Let `rsnd` be the sender returned by this function
+   - Let `ext_op` be the `operation_state` object returned by connecting `rsnd` to a receiver `ext_recv`.
+   - If `ext_op` is started, then `ext_recv` will be notified with `set_value()` whenever all the work started in the context of the `async_scope` object (by using `spawn` and `spawn_future`) is completed, and no senders are in flight.
+   - It is safe not to connect `rsnd` or not to start `ext_op`.
+
+3. *Note*: it is safe to call `empty()` multiple times on the same object and use the returned sender; it is also safe to use the returned senders in parallel.
+
+4. *Note*: it is safe to call `empty()` and use the returned sender in parallel to calling `spawn()` and `spawn_future()` on the same `async_scope` object.  
+
+
+## `async_scope::get_stop_source`
+
+1. Returns an `in_place_stop_source` object associated with `async_scope`.
+
+2. Requesting stop on the returned stop source will ensure that no work can be added to the `async_scope` object by using `spawn()` and `spawn_future()`.
+
+3. *Note*: requesting stop on the returned stop source doesn't automatically request stop to all the work that has been spawned in the `async_scope` object with the help of `spawn()` and `spawn_future()`.
+
+## `async_scope::get_stop_token`
+
+1. This is equivalent to calling `get_stop_source().get_token()`.
+
+## `async_scope::request_stop`
+
+1. This is equivalent to calling `get_stop_source().request_stop()`.
+
+TODO (LucTeo): This is currently different from the implementation
+
 ---
 references:
   - id: Dahl72
