@@ -239,6 +239,8 @@ Stops the `async_scope` inline. Equivalent to calling `get_stop_source().request
 Examples of use
 ===============
 
+## Spawning work from within a task
+
 Using a global `async_scope` in combination with a `system_context` from [@P2079R2] so spawn work from within a task and join it later:
 ```c++
 using namespace std::execution;
@@ -279,6 +281,8 @@ std::cout << "Result: " << result << "\n";
 // and destruction of the context is now safe
 ```
 
+## Starting parallel work
+
 In this example we use the `async_scope` within lexical scope to construct an algorithm that performs parallel work.
 This uses the [`let_value_with`](https://github.com/facebookexperimental/libunifex/blob/main/doc/api_reference.md#let_value_withinvocable-state_factory-invocable-func---sender) algorithm implemented in [libunifex](https://github.com/facebookexperimental/libunifex/) which simplifies in-place construction of a non-moveable object in the `let_value_with` algorithms operation state.
 Here foo launches 100 tasks that concurrently run on some scheduler provided to `foo` through its connected receiver, and then asynchronously joined.
@@ -312,6 +316,41 @@ void bar() {
   // Provide the system context scheduler to start the work and propagate
   // through receiver queries
   this_thread::sync_wait(on(ctx.scheduler(), foo()));
+}
+```
+
+## Listener loop in an HTTP server
+
+This example shows how one can write the listener loop in an HTTP server, with the help of coroutines.
+The HTTP server will continuously accept new connection and start work to handle the requests coming on the new connections.
+While the listening activity is bound in the scope of the loop, the lifetime of handling requests may exceed the scope of the loop.
+We use `async_scope` to limit the lifetime of handling the requests.
+
+```c++
+auto listener(int port, io_context& ctx, static_thread_pool& pool) -> task<size_t> {
+    listening_socket listen_sock{port};
+    async_scope work_scope;
+    size_t count{0};
+    while (!ctx.is_stopped()) {
+        // Accept a new connection
+        connection conn = co_await async_accept(ctx, listen_sock);
+        count++;
+
+        // Create work to handle the connection in the scope of `work_scope`
+        conn_data data{std::move(conn), ctx, pool};
+        sender auto snd
+            = just() 
+            | let_value([data = std::move(data)]() {
+                  return handle_connection(data);
+              })
+            ;
+        work_scope.spawn(std::move(snd));
+    }
+    // Wait until all requests are handled
+    work_scoped.request_stop();
+    sync_wait(work_scope.empty());
+    // At this point, all the request handling is complete 
+    co_return count;
 }
 ```
 
