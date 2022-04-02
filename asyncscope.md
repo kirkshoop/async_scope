@@ -354,6 +354,128 @@ auto listener(int port, io_context& ctx, static_thread_pool& pool) -> task<size_
 }
 ```
 
+
+Design considerations
+=====================
+
+## The shape of the receivers
+
+It makes sense for `spawn_future()` to accept senders with any type of completion signatures.
+The caller gets back a sender that can be used to be chained with other senders, and it doesn't make sense to restrict the shape of this sender.
+
+The same reasoning doesn't necessarily follow for `spawn()` as the result of the spawned work is dropped.
+There are two main alternatives:
+
+- do not constrain the shape of the input sender (i.e., dropping the results of the computation)
+- constrain the shape of the input sender
+
+The current proposal goes with the second alternative.
+The main reason for this is that it tries to prevent silent dropping of results.
+The caller can always transform the input sender before passing it to `spawn()` doing the dropping of the values manually.
+
+Thus, `spwan()` accepts only senders that advertize `set_value()` (without any parameters) in the completion signatures.
+
+## Handling errors in `spawn`
+
+The current proposal accepts senders that can complete with error.
+On receiving the error, the implementation must call `std::terminate()`.
+
+Another alternative is to not accept senders that can send errors.
+This will prevent accidental errors scenarios that will terminate the application.
+
+## Handling stop signals in `spawn`
+
+Similar to the error case, we have the alternative of allowing or forbidding `set_stopped` as a completion signal.
+Because the goal of `async_scope` is to track the lifetime of the work started through it, it shouldn't matter whether that the work completed with success or by being stopped.
+As it is assumed that sending the stop signal is the result of an explicit choice, it makes sense to allow senders that can terminate with `set_stopped`.
+
+The alternative would require transforming the sender before passing it to spawn, something like `s.spawn(std::move(snd) | let_stopped([]{ return just_stopped(); ))`.
+This is considered boilerplate and not helpful, as the sopped scenarios should be explicit, and not exceptional.
+
+## Stop handling
+
+The paper requires that if the caller requests stop to an `async_scope` object, then the work that is currently being executed is not cancelled (unless the work explicitly interacts with the stop source of the `async_scope` object).
+
+There is also the alternative that, when stop is requested to `async_scope`, then stop is also requested to operations that are not yet complete.
+While this can be a good thing in many contexts, it is not the best strategy in all cases.
+Let us consider an `async_scope` that is used to keep track of the work needed to handle requests.
+When trying to gracefully shut down the application, one might need to drain the existing requests without stopping their processing.
+
+Either of the two cases can be simulated with the help of the other case.
+
+## Uses in other concurrent abstractions
+
+We anticipate the interface `async_scope` to be used in other concurrent abstractions.
+This implies that it is useful to think of this interface in a larger context.
+If the interface is fit for the other purposes, it may be an indication that we have the right interface.
+
+Let us consider a concurrent abstraction that will serialize dynamic work provided to it.
+That is, if try to start multiple operations at the same time, only one is executed at a given time; the other ones are queued and will be executed whenever the previous operations complete. 
+
+An interface to this abstraction might look like the following:
+```c++
+struct serializer {
+    ~serializer();
+    serializer(const serializer&) = delete;
+    serializer(serializer&&) = delete;
+    serializer& operator=(const serializer&) = delete;
+    serializer& operator=(serializer&&) = delete;
+
+    auto spawn(sender auto&& snd) -> void;
+    auto spawn_future(sender auto&& snd) -> future_sender<S>;
+
+    [[nodiscard]]
+    auto empty() const noexcept -> empty_sender;
+    
+    auto get_stop_source() noexcept -> in_place_stop_source&;
+    auto get_stop_token() const noexcept -> in_place_stop_token;
+    auto request_stop() noexcept -> void;
+};
+```
+
+One can add work in the context of the serializer.
+One might want to add some work that needs to be executed in the serializer, then continue with some other work outside the serializer.
+One might want to wait until the serializer is drained, or might want to stop processing any work in the serializer.
+All of these can be fulfilled by this interface, and this is the same interface as `async_scope`.
+
+Similar to this abstraction, one might imagine abstractions that can execute maximum *N* concurrent work items, or abstractions that execute work based on given labels, or abstractions that execute work based on dynamic priorities, etc.
+All of these can be obtained by using an interface similar to the one we have for `async_scope`, maybe with some extra arguments.  
+
+This provides a strong indication that the API for `async_scope` is appropriate.
+
+## Removal of P2300's `start_detached`
+
+The `async_scope::spawn` method can be used as a replacement for `start_detached` proposed in [@P2300R4].
+Essentially it does the same thing, but it can also control the lifetime of the spawned work.
+
+This paper might propose the removal of `start_detached` from `std::execution`. However, at this point, the paper doesn't make this proposal.
+
+## Supporting pipe operator
+
+The paper, as expressed doesn't support the pipe operator to be used in conjunction with `spawn()` and `spawn_future()`.
+One might think that it is useful to write code like the following:
+
+```c++
+async_scope s;
+std::move(snd1) | s.spawn(); // returns void
+sender auto s = std::move(snd2) | s.spawn_future() | then(...);
+```
+
+In [@P2300R4] senders consumers won't have support for pipe operator.
+As `spawn()` works similar to `start_detached` from [@P2300R4], which is a sender consumer, if we follow the same rationale, it makes sense not to support pipe operator for `spawn()`.
+
+On the other hand, `spawn_future()` is not a sender consumer, thus we might have considered adding pipe operator to it.
+To keep consistency with `spawn()`, at this point the paper doesn't support pipe operator for `spawn_future()`.
+
+## Use of customization point objects
+
+Unlike [@P2300R4], this paper does not propose any use of customization point objects.
+While `start_detached` is a customization point object, its correspondent, `async_scope::spawn` is not.
+
+At this point, we do not believe that customizing the operations of `async_scope` will be needed by the users.
+Therefore, the paper does not propose any customization point objects.
+
+
 Specification
 =============
 
