@@ -90,7 +90,7 @@ auto parallel_work(const std::vector<work_item*>& items) -> void {
         my_work_scope.spawn(std::move(snd));   // MODIFIED!
     }
     // maybe more work here...
-    ex::sync_wait(my_work_scope.on_empty());      // NEW!
+    this_thread::sync_wait(my_work_scope.on_empty());      // NEW!
     // `ctx` and `my_pool` can now safely be destroyed
 }
 ```
@@ -131,18 +131,12 @@ The requirements for the async scope are:
 
  - An `async_scope` must be non-movable and non-copyable.
  - An `async_scope` must be empty when the destructor runs.
- - An `async_scope` must not provide any query CPO's on the receiver passed to the sender.
- - An `async_scope` must provide the `get_stop_token()` query on the receiver passed to the sender, in order to forward cancellation of the async_scope `stop_source` to all nested and spawned senders. (see design discussion)
- - An `async_scope` must allow an arbitrary sender to be nested within the scope without eagerly starting the sender.
- - An `async_scope` must constrain `spawn()` and `spawn_future()` to accept only senders that are never-blocking.
  - An `async_scope` must introduce a cancellation scope.
+ - An `async_scope` must not provide any query CPO's on the receiver passed to the sender, other than `get_stop_token()` (in order to forward cancellation of the async_scope `stop_source` to all nested and spawned senders).
+ - An `async_scope` must allow an arbitrary sender to be nested within the scope without eagerly starting the sender (`nest()`).
+ - An `async_scope` must constrain `spawn()` and `spawn_future()` to accept only senders that are never-blocking.
+ - An `async_scope` must constrain `spawn()` to accept only senders that complete with void.
  - An `async_scope` must provide an `empty_sender` that completes when all spawned senders are complete.
-
-This paper defines additional types:
-
- - A `nested_sender` that represents a `sender` that has not been started yet and that - once started - must complete before the scope is 'exited'.
- - An `empty_sender` that - once started - will complete when the scope is empty.
- - A `future_sender` that represents a potentially eagerly executing `sender`.
 
 ## Definitions
 
@@ -167,33 +161,36 @@ struct async_scope {
 };
 
 template<class... Ts>
-struct nested_sender; // see below;
+struct nested_sender; @_see below_@
 
 template<class... Ts>
-struct future_sender; // see below;
+struct future_sender; @_see below_@
 
-struct empty_sender; // see below;
+struct empty_sender; @_see below_@
 ```
 
 ## Lifetime
 
 An `async_scope` object must outlive work that is spawned on it. It should be viewed as owning the storage for that work.
-The `async_scope` may be constructed in a local context, matching syntactic scope or the lifetime of surrounding algorithms.
-The destructor of an `async_scope` will terminate if there is outstanding work in the scope at destruction time, therefore `on_empty` **must** be called and the returned `empty_sender` **must** have started and completed with `void`, before the `async_scope` object is destroyed.
+The `async_scope` may be constructed in a local context, matching the syntactic scope or the lifetime of surrounding algorithms.
+The destructor of an `async_scope` will `terminate()` if there are outstanding senders in the scope at destruction time, therefore `on_empty` **must** be called and the returned `empty_sender` **must** have started and completed with `void`, before the `async_scope` object is destroyed.
 
 ## nest
 
 `nest(sender) const&->nested_sender<Values…>;`
 
-returns a `nested_sender` that extends the lifetime of the `async_scope` that produced it. 
+returns a `nested_sender` that extends the lifetime of the `async_scope` that produced it to include the lifetime of the nested_sender object and, if started, the lifetime of the given sender operation.
 
+A call to `nest()` does not start the given sender.
 A call to `nest()` is not expected to incur allocations.
 
-When passed a valid `sender` `s` or type `S`, that satisfies `sender_of<S, Values...>` and that does not complete inline with the call to `start()` returns a `nested_sender<Values...>`. `s` will not be started by the call to `nest()`.
+When passed a valid `sender`, `s`, or type `S`, that satisfies `sender_of<S, Values...>` returns a `nested_sender<Values...>`. `s` will not be connected and started by the call to `nest()`.
 
-The `nested_sender<Values...>` `n` returned from `nest()` prevents the scope from ending. It is safe to drop `n` without starting it to remove it from the `async_scope` lifetime. 
+Connecting and starting the `nested_sender<Values...>`, `n`, returned from `nest()` will connect and start `s`.
 
-Cancelling the `nested_sender<Values...>`, `n`, cancels `s` and does not cancel the `async_scope`.
+The object `n` prevents the scope from ending. It is safe to drop `n` without starting it and this will remove it from the `async_scope` lifetime. 
+
+Cancelling the `nested_sender<Values...>`, `n`, once it is connected and started cancels `s` and does not cancel the `async_scope`.
 
 ## spawn
 
@@ -224,9 +221,8 @@ Cancelling the `future_sender<Values...>`, `f`, cancels `s` and does not cancel 
 `empty_sender` completes with `void` when all spawned senders have completed and no senders are in flight in the `async_scope`.
 An `async_scope` can be empty more than once.
 The intended usage is to spawn all the senders and then start the `empty_sender` to know when all spawned senders have completed.
-Another supported usage is to use `request_stop` on async_scope to prevent further senders from being spawned, and then start the `empty_sender`.
 
-To safely destroy the `async_scope` object the `async_scope` must be stopped either through its `stop_source` via `get_stop_source()` or through a call to `request_stop()`, to prevent more work being spawned, then the `async_scope` must be left to drain.
+To safely destroy the `async_scope` object an empty_sender start must happen-after all calls to `nest()`, `spawn()` and `spawn_future()` are complete. Once empty_sender completes the async_scope can be safely destructed - or a new set of calls to `nest()`, `spawn()` and `spawn_future()` happen-before the start of a new empty_sender and the async_scope destructor happens-after the completion of the empty_sender.
 
 That is to say the following is safe:
 
@@ -234,7 +230,6 @@ That is to say the following is safe:
 {
   async_scope s;
   s.spawn(snd);
-  s.request_stop();
   sync_wait(s.on_empty());
 }
 ```
@@ -243,18 +238,17 @@ That is to say the following is safe:
 
 `get_stop_token() const& ->stop_token;`
 
-Returns the `stop_token` associated with the `async_scope`. This will report stopped when the `stop_source` is stopped or `request_stop()` is called. The `stop_token` may be used by tasks launched on the `async_scope` to detect a stop request.
-
+Returns the `stop_token` associated with the `async_scope`. This will report stopped when the `stop_source` is stopped or `request_stop()` is called. The `stop_token` is provided to all nested and spawned senders to respond to a stop request.
 
 `get_stop_source() & ->stop_source;`
 
-Returns a `stop_source` associated with the `async_scope`'s `stop_token`. This `stop_source` will trigger the `stop_token`, and will cause future calls to `nest()` to produce a sender that behaves like the sender produced by `just_stopped()` and future calls to `spawn()` and `spawn_future()` to not start the passed `sender`. Future calls to `nest()`, `spawn()` and `spawn_future()` will silently drop the passed `sender`.
+Returns a `stop_source` associated with the `async_scope`'s `stop_token`. This `stop_source` will trigger the `stop_token`, and will cause future calls to `nest()`, `spawn()` and `spawn_future()` to start with a `stop_token` that is already in the `stop_requested()` state.
 
-Calling `request_stop` on the returned `stop_source` will not cancel senders spawned on the `async_scope` except where the algorithms explicitly used the scope's `stop_token`.
+Calling `request_stop` on the returned `stop_source` will forward that request to all the nested and spawned senders.
 
 `request_stop() & ->void;`
 
-Stops the `async_scope` inline. Equivalent to calling `get_stop_source().request_stop()`.
+Equivalent to calling `get_stop_source().request_stop()`.
 
 
 Examples of use
@@ -262,7 +256,7 @@ Examples of use
 
 ## Spawning work from within a task
 
-Using a global `async_scope` in combination with a `system_context` from [@P2079R2] so spawn work from within a task and join it later:
+Using a global `async_scope` in combination with a `system_context` from [@P2079R2] to spawn work from within a task and join it later:
 ```c++
 using namespace std::execution;
 
@@ -368,7 +362,6 @@ auto listener(int port, io_context& ctx, static_thread_pool& pool) -> task<size_
         work_scope.spawn(std::move(snd));
     }
     // Wait until all requests are handled
-    work_scoped.request_stop();
     sync_wait(work_scope.on_empty());
     // At this point, all the request handling is complete 
     co_return count;
@@ -391,9 +384,7 @@ Another option is to have a type that has one implementation per library vender.
 
 ### one vs many
 
-One option is to provide methods to replace `start_detached` and `ensure_started` [@P2300R4] with a safe mechanism that provides a way to know when the senders within a scope have all completed. This is the mechanism that allows senders to capture references and raw pointers to items that are from an enclosing scope.
-
-Another option would be for `async_scope` to have:
+One option would be for `async_scope` to have:
   `nest(sender) -> nested_sender`
 and not
   `spawn(sender) -> void`
@@ -404,6 +395,8 @@ This would remove questions of when and how the state is allocated and the opera
 The single concern of the `async_scope` that only had `nest()` would be to combine the lifetimes of many senders within one async scope.
 
 `spawn()` and `spawn_future()` would still exist, in some form, and would use an `async_scope` parameter or member or base class to place the sender within an `async_scope`.
+
+Another option is to add `spawn()` and `spawn_future()` methods to `async_scope`.
 
 > **Chosen:** Due to time constraints, this paper proposes to add methods for `spawn` and `spawn_future` in addition to `nest`.
 
@@ -447,27 +440,29 @@ Because the goal of `async_scope` is to track the lifetime of the work started t
 As it is assumed that sending the stop signal is the result of an explicit choice, it makes sense to allow senders that can terminate with `set_stopped`.
 
 The alternative would require transforming the sender before passing it to spawn, something like `s.spawn(std::move(snd) | let_stopped([]{ return just_stopped(); ))`.
-This is considered boilerplate and not helpful, as the sopped scenarios should be explicit, and not exceptional.
+This is considered boilerplate and not helpful, as the stopped scenarios should be explicit, and not exceptional.
 
 ## Stop handling
 
-The paper requires that if the caller requests stop to an `async_scope` object, then the work that is currently being executed is not stopped (unless the work explicitly interacts with the `stop_source` of the `async_scope` object).
-
-### `request_stop` on the `async_scope` is not forwarded
-
-A `stop_callback` is not a destructor, it is a signal requesting running work to stop. Calling `stop_source::request_stop()` from the destructor is a bug, because that would use a **sync** scope exit to implicitly request that **async** senders stop. In the case of an `async_scope`, this bug is particularly egregious, since the sync scope exit may not own all the code for all the senders that were nested and spawned within the `async_scope`.
+The paper requires that if the caller requests stop to an `async_scope` object, then this request is forwarded to the nested and spawned senders.
 
 ### `request_stop` on the `async_scope` is forwarded
 
-There is also the alternative that, when stop is requested to `async_scope`, then stop is also requested to operations that are not yet complete.
+When stop is requested to `async_scope`, then stop is also requested to operations that are not yet complete.
 While this can be a good thing in many contexts, it is not the best strategy in all cases.
 
-Consider `spawn()` in isolation. Forwarding the cancellation of the `async_scope` to the spawned senders seems like it would be natural.
-
-Consider `nest()` and `spawn_future()`. They must combine two potential stop tokens. One from the `async_scope` and the other from the receiver passed to the returned `nested_sender` and `future_sender`. The semantics would be that either stop token would cancel the sender but the token from the receiver passed to the returned `nested_sender` and `future_sender` would not stop the `async_scope`s `stop_source`.
-
 Consider an `async_scope` that is used to keep track of the work needed to handle requests.
-When trying to gracefully shut down the application, one might need to drain the existing requests without stopping their processing.
+When trying to gracefully shut down the application, one might need to drain the existing requests without stopping their processing. The way to do that is to use the `empty_sender` without stopping the `async_scope`.
+
+Consider `spawn()` in isolation. Forwarding the cancellation of the `async_scope` to the spawned senders would be natural.
+
+Consider `nest()` and `spawn_future()`. They must combine two potential stop tokens. One from the `async_scope` and the other from the receiver passed to the returned `nested_sender` and `future_sender`. The semantics would be that either stop token would cancel the sender and would not stop the `async_scope`s `stop_source`.
+
+Consider the use case where a reference to an `async_scope` is provided to many nested operations and functions to attach senders that they produce. Some of those senders may restore an invariant in a file-system or some other system. The way for a nested operation and function to make sure that the invariant is not corrupted by a forwarded stop request from the `async_scope`, is to apply a `never_stoppable_token` to their sender to hide the token provided by the `async_scope`.
+
+### `request_stop` on the `async_scope` is not forwarded
+
+A motivation for not forwarding a stop request was that a `stop_callback` is not a destructor, it is a signal requesting running work to stop. If `request_stop()` was called within the `async_scope` destructor, or any other destructor, then those destructors would be expected to block until an `empty_sender` completed. As falling off a scope or having a shared_ptr count reach 0 is implicit, it is very difficult to ensure that a `request_stop()` followed by starting an `empty_sender` would not have a race with concurrent calls to `nest()`, `spawn()` and `spawn_future()`. 
 
 ### inverting the forwarding default
 
@@ -476,8 +471,6 @@ Either of the two cases can be simulated with the help of the other case.
 Example: When cancellation is not forwarded and forwarding is wanted, inject the same `stop_token` into all the spawned senders that need to be cancelled. 
 
 Example: When cancellation is forwarded and forwarding is not wanted, mask the receiver provided `stop_token` by injecting a `never_stoppable_token` into all the spawned senders that need to complete even when cancelled. 
-
-> NOTE: if the default is changed to forward cancellation to all nested and spawned senders, the `async_scope` requirement that "no query CPOs are on the receiver provided to the sender" will need to be changed, as this would add `get_stop_token` to the receiver to implement forwarding.
 
 ## Uses in other concurrent abstractions
 
@@ -550,6 +543,45 @@ While `start_detached` is a customization point object, its correspondent, `asyn
 At this point, we do not believe that customizing the operations of `async_scope` will be needed by the users.
 Therefore, the paper does not propose any customization point objects.
 
+Q & A
+=====
+
+## Q why does async_scope terminate in the destructor instead of blocking like jthread?
+
+One author's perspective:
+
+`jthread` blocking in the destructor is bad for composition. 
+`jthread` and `thread` should `terminate()` if the destructor runs before the thread exits. 
+
+Imagine `make_shared<jthread>(..)`. 
+Where will the destructor run? 
+In what context will the destructor run? 
+
+We can require users to know whether the destructor blocks for every type, and require users to carefully control the lifetime of all those objects - with the only indication of failure being a deadlock. Or we can teach that destructors will not block and indicate lifetime failures with `terminate()`. 
+
+software is less likely to ship with crashes and more likely to be fixed when there are crashes. Deadlocks result in users forcefully terminating the app and forced terminations are rarely reported to the developer as a bug and even if reported, tend to have no debug data (stacks, dumps, etc..). If there is a lifetime bug that you want fixed - it had better crash.
+
+Blocking must be explicit (exiting a sync scope is implicit - and shared_ptr makes it even more scary). 
+Blocking must be grepable. 
+Blocking must be rare. 
+Blocking is like reinterpret_cast<> - the name should be long and scary. 
+`join()` is a terrible design - this is why async_scope has `on_empty()` instead. 
+Every asychronous lifetime must be managed with non-blocking primitives and only `sync_wait()` is used to block.
+
+## Q why doesn't the async_scope destructor stop all the nested and spawned senders?
+
+One author's perspective:
+
+`stop_callback` is not a destructor because:
+`request_stop()` is **asking** for early completion. 
+`request_stop()` does not end the lifetime of the operation, `set_value()`, `set_error()` and `set_stopped()` end the lifetime - those are the destructors for an operation.
+`request_stop()` might result in completion with `set_stopped()`, but `set_value()` and `set_error()` are equally likely. 
+
+`request_stop()` should not be called from a destructor because:
+If a sync context intends to ask for early completion of an async operation, then it needs to wait for that operation to actually complete before continuing (`set_value()`, `set_error()` and `set_stopped()` are the destructors for the async operation), and sync destructors must not block. see [Q why does async_scope terminate in the destructor instead of blocking like jthread?]. 
+
+> NOTE: async RAII, could be used to signal early completion because it would be composed with other async operation lifetimes. The operation being stopped would complete before the aync RAII operation completed - without any blocking.
+
 Specification
 =============
 
@@ -558,18 +590,18 @@ Specification
 ```c++
 namespace std::execution {
 
-namespace { // exposition only 
-    struct async_scope_receiver { // exposition only
+namespace { @_exposition-only_@ 
+    struct async_scope_receiver @_exposition-only_@
         friend auto set_value(async_scope_receiver) noexcept -> void;
         template <typename E>
         friend auto set_error(async_scope_receiver, E) noexcept -> void;
         friend auto set_stopped(async_scope_receiver) noexcept -> void;
     };
     template <typename S>
-    struct nested_sender; // exposition only
+    struct nested_sender; @_exposition-only_@
     template <typename S>
-    struct future_sender; // exposition only
-    struct empty_sender { // exposition only
+    struct future_sender; @_exposition-only_@
+    struct empty_sender { @_exposition-only_@
         using completion_signatures =
             execution::completion_signatures<
                 execution::set_value_t()
@@ -584,12 +616,12 @@ struct async_scope {
     async_scope& operator=(const async_scope&) = delete;
     async_scope& operator=(async_scope&&) = delete;
 
-    template <sender_to<async_scope_receiver> S>
+    template <sender S>
     auto nest(S&& snd) -> nested_sender<S>;
 
     template <sender_to<async_scope_receiver> S>
     auto spawn(S&& snd) -> void;
-    template <sender_to<async_scope_receiver> S>
+    template <sender S>
     auto spawn_future(S&& snd) -> future_sender<S>;
 
     [[nodiscard]]
@@ -609,11 +641,11 @@ struct async_scope {
 
 2. The destructor will call `terminate()` if there is outstanding work in the `async_scope` object (i.e., work created by `spawn()` and `spawn_future()` did not complete).
 
-3. *Note*: It is always safe to call the destructor after the sender returned by `on_empty()` sent the completion signal, provided that there were no calls to `spawn()` and `spawn_future()` since `on_empty()` was called, or stop was requested on our stop source before any of these `spawn()` and `spawn_future()` calls.
+3. *Note*: It is always safe to call the destructor after the sender returned by `on_empty()` sent the completion signal, provided that there were no calls to `nest()`, `spawn()` and `spawn_future()` since the `empty_sender` was started.
 
 ## `async_scope::nest`
 
-1. `async_scope::nest` is used to produce a `nested_sender` that nests the sender within the lifetime of the `async_scope` object. The `nested_sender` will start the given sender when it is started.
+1. `async_scope::nest` is used to produce a `nested_sender` that nests the sender within the lifetime of the `async_scope` object. The given sender will be started when the `nested_sender` is started.
 
 2. The returned sender has the same completion signatures as the input sender.
 
@@ -671,7 +703,6 @@ struct async_scope {
 6. *Note*: cancelling the sender returned by this function will not have an effect about the `async_scope` object.  
 
 
-
 ## `async_scope::on_empty`
 
 1. `async_scope::on_empty` returns a sender that can be used to get notifications when all the work belonging to the `async_scope` object is completed.
@@ -679,21 +710,22 @@ struct async_scope {
 2. *Effects*:
    - Let `rsnd` be the sender returned by this function
    - Let `ext_op` be the `operation_state` object returned by connecting `rsnd` to a receiver `ext_recv`.
-   - If `ext_op` is started, then `ext_recv` will be notified with `set_value()` whenever all the work started in the context of the `async_scope` object (by using `spawn` and `spawn_future`) is completed, and no senders are in flight.
+   - If `ext_op` is started, then `ext_recv` will be notified with `set_value()` whenever all the work started in the context of the `async_scope` object (by using `nest()`, `spawn` and `spawn_future`) is completed, and no senders are in flight.
    - It is safe not to connect `rsnd` or not to start `ext_op`.
 
 3. *Note*: it is safe to call `on_empty()` multiple times on the same object and use the returned sender; it is also safe to use the returned senders in parallel.
 
-4. *Note*: it is safe to call `on_empty()` and use the returned sender in parallel to calling `spawn()` and `spawn_future()` on the same `async_scope` object.  
+4. *Note*: it is safe to call `on_empty()` and use the returned sender in parallel to calling `nest()`, `spawn()` and `spawn_future()` on the same `async_scope` object.
 
+5. *Note*: it is not safe to destruct the `async_scope` when the sender returned from a call to `on_empty()` completes after being used in parallel to calling `nest()`, `spawn()` and `spawn_future()` on the same `async_scope` object.
 
 ## `async_scope::get_stop_source`
 
 1. Returns an `in_place_stop_source` object associated with `async_scope`.
 
-2. Requesting stop on the returned stop source will ensure that no work can be added to the `async_scope` object by using `spawn()` and `spawn_future()`.
+2. Requesting stop on the returned stop source will ensure that work added to the `async_scope` object by using `nest()`, `spawn()` and `spawn_future()` is given a stop token that already has `stop_requested() == true`.
 
-3. *Note*: requesting stop on the returned stop source doesn't automatically request stop to all the work that has been spawned in the `async_scope` object with the help of `spawn()` and `spawn_future()`.
+3. *Note*: requesting stop on the returned stop source will automatically request to stop all the work that has been nested and spawned in the `async_scope` object with the help of `nest()`, `spawn()` and `spawn_future()`.
 
 ## `async_scope::get_stop_token`
 
