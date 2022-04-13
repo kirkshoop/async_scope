@@ -582,6 +582,82 @@ If a sync context intends to ask for early completion of an async operation, the
 
 > NOTE: async RAII, could be used to signal early completion because it would be composed with other async operation lifetimes. The operation being stopped would complete before the aync RAII operation completed - without any blocking.
 
+Naming
+======
+
+As is often true, naming is a difficult task.
+
+## `async_scope`
+
+This represents the root of a set of nested lifetimes.
+
+One mental model for this is a semaphore. It tracks a count of lifetimes and fires an event when the count reaches 0.
+
+Another mental model for this is block syntax. `{}` represents the root of a set of lifetimes of locals and temporaries and nested blocks.
+
+Another mental model for this is a container. This is the least accurate model. This container is a value that does not contain values. This container contains a set of lifetimes that have not completed (a lifetime is not a value).
+
+alternatives: `sender_scope`, `dynamic_scope`, `dynamic_lifetime`, `scope`, `lifetime`
+
+## `nest`
+
+This provides a way to extend the lifetime to include a sender. This does not allocate state, call connect or start. This is the basic operation for `async_scope`. `spawn` and `spawn_future` use `nest` to extend the scope and then allocate, connect and start.
+
+It would be good for the name to indicate that it is a simple operation (insert, add, embed, extend might communicate allocation, which this does not do).
+
+alternatives: `add`, `extend`, `embed`, `include`
+
+## `spawn`
+
+This provides a way to start a sender that produces `void` and extend the lifetime of the `async_scope` to exceed the lifetime of the operation. This allocates, connects and starts the sender.
+
+It would be good for the name to indicate that it is an expensive operation.
+
+alternatives: `start`, `submit`, `enqueue`, `do`, `run`
+
+## `spawn_future`
+
+This provides a way to start work and later ask for the result. This will allocate, connect, start and resolve the race (using synchronization primitives) between the completion of the given sender and the start of the returned sender. Since the type of the receiver supplied to the result sender is not known when the given sender starts, the receiver will be type-erased when it is connected.
+
+It would be good for this name to be ugly to indicate that it is very expensive.
+
+alternatives: `spawn_continue`, `spawn_result`, `spawn_with_result`, `spawn_buffered`, `spawn_virtual`, `spawn_dynamic`
+
+> _Note_: "`spawn`" in these alternatives would be replaced by the alternative selected for `spawn`
+
+## `on_empty`
+
+This provides a way to get a sender that completes when the all the lifetimes nested inside the `async_scope` complete.
+
+`empty` falls out of the poor mental model of `async_scope` being a container. `ended`, `complete` etc.. are problematic because additional senders might be used to extend the lifetime after the sender returned has completed.
+
+This is the async version of a 'get' member function. A pattern was established a long time ago to not prefix 'get' methods on an object in std with `get_`. What is the current guidance? Do we want a prefix for async queries on objects in std?
+
+alternatives: `empty`, `ready`, `when_empty`, `when_ready`, `on_ready`
+
+## table of how some alternatives might be combined
+
++----+-----------------------+---------+------------+------------------+--------------+
+| id | comments              | nest    | spawn void | spawn w/result   | empty        |
++:==:+:======================+:========+:===========+:=================+:=============+
+| a: | status quo            | `nest`  | `spawn`    | `spawn_future`   | `on_empty`   |
++----+-----------------------+---------+------------+------------------+--------------+
+| b: | removes confusion     | `add`   | `spawn`    | `spawn_continue` | `when_empty` |
+|    | around “future”,      |         |            |                  |              | 
+|    | “empty” and "nest"    |         |            |                  |              |
++----+-----------------------+---------+------------+------------------+--------------+
+| c: |  tries to match       | `add`   | `start`    | `start_continue` | `when_empty` |
+|    | the `start_detached`  |         |            |                  |              |
++----+-----------------------+---------+------------+------------------+--------------+
+| d: | tries an alternative  | `add`   | `start`    | `start_chain`    | `when_empty` |
+|    | to using “continue”   |         |            |                  |              |
++----+-----------------------+---------+------------+------------------+--------------+
+| e: | tries an alternative  | `extend`| `start`    | `start_result`   | `on_ready`   |
+|    | “result” and "extend" |         |            |                  |              |
+|    | and "ready"           |         |            |                  |              |
++----+-----------------------+---------+------------+------------------+--------------+
+
+
 Specification
 =============
 
