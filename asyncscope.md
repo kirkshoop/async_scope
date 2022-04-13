@@ -47,17 +47,21 @@ Let us assume the following code:
 namespace ex = std::execution;
 
 struct work_context;
-auto do_work(work_context, work_item*) -> void;
+struct work_item;
+void do_work(work_context&, work_item*);
+std::vector<work_item*> get_work_items();
 
-auto parallel_work(const std::vector<work_item*>& items) -> void {
+int main() {
     static_thread_pool my_pool{8};
-    work_context ctx;
+    work_context ctx; // create a global context for the application
+
+    std::vector<work_item*> items = get_work_items();
     for ( auto item: items ) {
+        // Spawn some work dynamically
         ex::sender auto snd = ex::transfer_just(my_pool.get_scheduler(), item)
                             | ex::then([&](work_item* item){ do_work(ctx, item); });
         ex::start_detached(std::move(snd));
     }
-    // maybe more work here...
     // `ctx` and `my_pool` is destroyed
 }
 ```
@@ -80,23 +84,27 @@ If there are still operations that are not yet complete, this might lead to cras
 This paper proposes the `async_scope` facility that would help us avoid the invalid behavior.
 With it, one might write a safe code this way:
 ```c++
-auto parallel_work(const std::vector<work_item*>& items) -> void {
+int main() {
     static_thread_pool my_pool{8};
-    work_context ctx;
-    async_scope my_work_scope;                  // NEW!
+    work_context ctx; // create a global context for the application
+    async_scope my_work_scope;                          // NEW!
+
+    std::vector<work_item*> items = get_work_items();
     for ( auto item: items ) {
+        // Spawn some work dynamically
         ex::sender auto snd = ex::transfer_just(my_pool.get_scheduler(), item)
                             | ex::then([&](work_item* item){ do_work(ctx, item); });
-        my_work_scope.spawn(std::move(snd));   // MODIFIED!
+        my_work_scope.spawn(std::move(snd));            // MODIFIED!
     }
-    // maybe more work here...
-    this_thread::sync_wait(my_work_scope.on_empty());      // NEW!
+    this_thread::sync_wait(my_work_scope.on_empty());   // NEW!
     // `ctx` and `my_pool` can now safely be destroyed
 }
 ```
 
 The newly introduced `async_scope` object allows us to control the lifetime of the dynamic work we are spawning.
 We can wait for all the work that we spawn to be complete before we destruct the objects used by the parallel work.
+
+Please see below for more examples.
 
 
 ## Step forward towards Structured Concurrency
@@ -114,14 +122,176 @@ This will prevent local reasoning, thus will make the program harder to understa
 To properly structure our concurrency, we need an abstraction that ensures that all the work being started has a proper lifetime guarantee.
 This is the goal of `async_scope`.
 
-## Intel criticism on P2300
+## P2300 might be blocked by the lack of `async_scope`
 
-Although [@P2300R4] is generally considered a strong improvement on concurrency in C++, Intel voted against introducing this into the C++ standard.
+Although [@P2300R4] is generally considered a strong improvement on concurrency in C++, various people voted against introducing this into the C++ standard.
 The main reason for this negative vote is the absence of a feature like `async_scope`.
 
-This paper wants to fix this issue.
+This paper wants to fix this issue, and ensure that [@P2300R4] is not being blocked.
 
-TODO: better formulation
+Examples of use
+===============
+
+## Spawning work from within a task
+
+Using a global `async_scope` in combination with a `system_context` from [@P2079R2] to spawn work from within a task and join it later:
+```c++
+using namespace std::execution;
+
+system_context ctx;
+int result = 0;
+
+{
+  async_scope scope;
+  scheduler auto sch = ctx.scheduler();
+
+  sender auto val = on(
+    sch, just() | then([sch, &scope](auto sched) {
+
+        int val = 13;
+
+        auto print_sender = just() | then([val]{
+          std::cout << "Hello world! Have an int with value: " << val << "\n";
+        });
+        // spawn the print sender on sched to make sure it
+        // completes before shutdown
+        scope.spawn(on(sch, std::move(print_sender)));
+
+        return val;
+    })
+  ) | then([&result](auto val){result = val});
+
+  scope.spawn(std::move(val));
+
+
+  // Safely wait for all nested work
+  this_thread::sync_wait(scope.on_empty());
+};
+
+// The scope ensured that all work is safely joined, so result contains 13
+std::cout << "Result: " << result << "\n";
+
+// and destruction of the context is now safe
+```
+
+## Starting parallel work
+
+In this example we use the `async_scope` within lexical scope to construct an algorithm that performs parallel work.
+This uses the [`let_value_with`](https://github.com/facebookexperimental/libunifex/blob/main/doc/api_reference.md#let_value_withinvocable-state_factory-invocable-func---sender) algorithm implemented in [libunifex](https://github.com/facebookexperimental/libunifex/) which simplifies in-place construction of a non-moveable object in the `let_value_with` algorithms operation state.
+Here foo launches 100 tasks that concurrently run on some scheduler provided to `foo` through its connected receiver, and then asynchronously joined.
+In this case the context the work is run on will be the `system_context`'s scheduler, from [@P2079R2].
+This structure emulates how we might build a parallel algorithm where each `some_work` might be operating on a fragment of data.
+```c++
+using namespace std::execution;
+
+sender auto some_work(int work_index);
+
+sender auto foo(scheduler auto sch) {
+  return schedule(sch)
+       | then([]{ std::cout << "Before tasks launch\n"; })
+       | let_value_with(
+           []{ return async_scope{}; },
+           [&sch](async_scope& scope) {
+             // Create parallel work
+             for(int i = 0; i < 100; ++i)
+               scope.spawn(on(sch, some_work(i)));
+             // Join the work with the help of the scope
+             return scope.on_empty();
+           }
+       )
+       | then([]{ std::cout << "After tasks complete\n"; })
+       ;
+}
+```
+
+## Calling `on_empty` multiple times
+
+In this example we showcase how `async_scope` objects can be used as gateways between different operations multiple times.
+We have a tabular data that needs to be processed in a clear sequence.
+First we need to preprocess the whole data.
+Then, we need to process the data by rows (each row can be processed in parallel).
+Then, we need to process the data by columns (each column can be processed in parallel).
+Finally, we postprocess the tabular data.
+
+As we are creating dynamic work for processing the rows and processing the columns, we are putting the spawned work in an `async_scope` object.
+As we need to process all the rows before processing columns, we will call `on_empty()` on our `async_scope` object to get notified when all the rows processing complete.
+Similarly, to wait for the processing of the columns to complete, we can use `on_empty()` again.
+
+It is ok if `on_empty()` is called multiple times on the same `async_scope` object.
+ource objects.
+
+```c++
+struct tabular_data;
+sender auto preprocess(tabular_data&);
+sender auto postprocess(tabular_data&);
+sender auto process_row(tabular_data&, int row);
+sender auto process_col(tabular_data&, int col);
+
+sender auto process(scheduler auto sch, tabular_data& data) {
+  async_scope& scope = *(new async_scope{});
+  return schedule(sch)
+       | let_value_with(
+           []{ return async_scope{}; },
+           [&](async_scope& scope) {
+             return just()
+                  // first phase: preprocess the tabular data
+                  | let_value([&]{ return preprocess(data); })
+                  // second phase: process the data by rows, in parallel
+                  | let_value([&]{
+                      for(int i = 0; i < data.num_rows(); ++i)
+                        scope.spawn(on(sch, process_row(data, i)));
+                      return scope.empty();
+                  })
+                  // third phase: process the data by columns, in parallel
+                  | let_value([&]{
+                      for(int i = 0; i < data.num_cols(); ++i)
+                        scope.spawn(on(sch, process_col(data, i)));
+                      return scope.empty();
+                  })
+                  // fourth phase: postprocess the data
+                  | let_value([&]{ return postprocess(data); })
+                  ;
+           }
+       )
+       ;
+}
+```
+
+
+## Listener loop in an HTTP server
+
+This example shows how one can write the listener loop in an HTTP server, with the help of coroutines.
+The HTTP server will continuously accept new connection and start work to handle the requests coming on the new connections.
+While the listening activity is bound in the scope of the loop, the lifetime of handling requests may exceed the scope of the loop.
+We use `async_scope` to limit the lifetime of handling the requests.
+
+```c++
+auto listener(int port, io_context& ctx, static_thread_pool& pool) -> task<size_t> {
+    listening_socket listen_sock{port};
+    async_scope work_scope;
+    size_t count{0};
+    while (!ctx.is_stopped()) {
+        // Accept a new connection
+        connection conn = co_await async_accept(ctx, listen_sock);
+        count++;
+
+        // Create work to handle the connection in the scope of `work_scope`
+        conn_data data{std::move(conn), ctx, pool};
+        sender auto snd
+            = just() 
+            | let_value([data = std::move(data)]() {
+                  return handle_connection(data);
+              })
+            ;
+        work_scope.spawn(std::move(snd));
+    }
+    // Continue only after all requests are handled
+    co_await work_scope.on_empty();
+    // At this point, all the request handling is complete 
+    co_return count;
+}
+```
+
 
 
 Async Scope
@@ -249,124 +419,6 @@ Calling `request_stop` on the returned `stop_source` will forward that request t
 `request_stop() & ->void;`
 
 Equivalent to calling `get_stop_source().request_stop()`.
-
-
-Examples of use
-===============
-
-## Spawning work from within a task
-
-Using a global `async_scope` in combination with a `system_context` from [@P2079R2] to spawn work from within a task and join it later:
-```c++
-using namespace std::execution;
-
-system_context ctx;
-int result = 0;
-
-{
-  async_scope scope;
-  scheduler auto sch = ctx.scheduler();
-
-  sender auto val = on(
-    sch, just() | then([sch, &scope](auto sched) {
-
-        int val = 13;
-
-        auto print_sender = just() | then([val]{
-          std::cout << "Hello world! Have an int with value: " << val << "\n";
-        });
-        // spawn the print sender on sched to make sure it
-        // completes before shutdown
-        scope.spawn(on(sch, std::move(print_sender)));
-
-        return val;
-    })
-  ) | then([&result](auto val){result = val});
-
-  scope.spawn(std::move(val));
-
-
-  // Safely wait for all nested work
-  this_thread::sync_wait(scope.on_empty());
-};
-
-// The scope ensured that all work is safely joined, so result contains 13
-std::cout << "Result: " << result << "\n";
-
-// and destruction of the context is now safe
-```
-
-## Starting parallel work
-
-In this example we use the `async_scope` within lexical scope to construct an algorithm that performs parallel work.
-This uses the [`let_value_with`](https://github.com/facebookexperimental/libunifex/blob/main/doc/api_reference.md#let_value_withinvocable-state_factory-invocable-func---sender) algorithm implemented in [libunifex](https://github.com/facebookexperimental/libunifex/) which simplifies in-place construction of a non-moveable object in the `let_value_with` algorithms operation state.
-Here foo launches 100 tasks that concurrently run on some scheduler provided to `foo` through its connected receiver, and then asynchronously joined.
-In this case the context the work is run on will be the `system_context`'s scheduler, from [@P2079R2].
-This structure emulates how we might build a parallel algorithm where each `some_work` might be operating on a fragment of data.
-```c++
-using namespace std::execution;
-
-auto foo(sender auto input) {
-  auto l = let_value(
-    when_all(
-      std::move(input),
-      get_scheduler()),
-    [](auto val, auto sch) {
-      return sch.schedule() |
-        then([](){std::cout << "Before tasks launch\n";}) |
-        let_value_with(
-          [](){return async_scope{};},
-          [&sch](async_scope& scope){
-            for(int i = 0; i < 100; ++0) {
-              scope.spawn(on(sch, some_work()));
-            }
-            return scope.on_empty() | then([](){std::cout << "After tasks complete\n";});
-          });
-    }
-  )
-}
-
-void bar() {
-  system_context ctx;
-  // Provide the system context scheduler to start the work and propagate
-  // through receiver queries
-  this_thread::sync_wait(on(ctx.scheduler(), foo()));
-}
-```
-
-## Listener loop in an HTTP server
-
-This example shows how one can write the listener loop in an HTTP server, with the help of coroutines.
-The HTTP server will continuously accept new connection and start work to handle the requests coming on the new connections.
-While the listening activity is bound in the scope of the loop, the lifetime of handling requests may exceed the scope of the loop.
-We use `async_scope` to limit the lifetime of handling the requests.
-
-```c++
-auto listener(int port, io_context& ctx, static_thread_pool& pool) -> task<size_t> {
-    listening_socket listen_sock{port};
-    async_scope work_scope;
-    size_t count{0};
-    while (!ctx.is_stopped()) {
-        // Accept a new connection
-        connection conn = co_await async_accept(ctx, listen_sock);
-        count++;
-
-        // Create work to handle the connection in the scope of `work_scope`
-        conn_data data{std::move(conn), ctx, pool};
-        sender auto snd
-            = just() 
-            | let_value([data = std::move(data)]() {
-                  return handle_connection(data);
-              })
-            ;
-        work_scope.spawn(std::move(snd));
-    }
-    // Wait until all requests are handled
-    sync_wait(work_scope.on_empty());
-    // At this point, all the request handling is complete 
-    co_return count;
-}
-```
 
 
 Design considerations
