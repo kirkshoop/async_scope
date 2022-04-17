@@ -707,41 +707,48 @@ Therefore, the paper does not propose any customization point objects.
 Q & A
 =====
 
-## Q why does async_scope terminate in the destructor instead of blocking like jthread?
+## Why does `async_scope` terminate in the destructor instead of blocking like `jthread`?
 
 One author's perspective:
 
-`jthread` blocking in the destructor is bad for composition. 
-`jthread` and `thread` should `terminate()` if the destructor runs before the thread exits. 
+- `jthread` blocking in the destructor is bad for composition.
+- `jthread` and `thread` should `terminate()` if the destructor runs before the thread exits. 
 
-Imagine `make_shared<jthread>(..)`. 
+Imagine `make_shared<jthread>(...)`. 
 Where will the destructor run? 
 In what context will the destructor run? 
 
-We can require users to know whether the destructor blocks for every type, and require users to carefully control the lifetime of all those objects - with the only indication of failure being a deadlock. Or we can teach that destructors will not block and indicate lifetime failures with `terminate()`. 
+We can require users to know whether the destructor blocks for every type, and require users to carefully control the lifetime of all those objects -- with the only indication of failure being a deadlock.
+Or we can teach that destructors will not block and indicate lifetime failures with `terminate()`. 
 
-software is less likely to ship with crashes and more likely to be fixed when there are crashes. Deadlocks result in users forcefully terminating the app and forced terminations are rarely reported to the developer as a bug and even if reported, tend to have no debug data (stacks, dumps, etc..). If there is a lifetime bug that you want fixed - it had better crash.
+Software is less likely to ship with crashes and more likely to be fixed when there are crashes.
+Deadlocks result in users forcefully terminating the app and forced terminations are rarely reported to the developer as a bug and even if reported, tend to have no debug data (stacks, dumps, etc...).
+If there is a lifetime bug that you want fixed -- it had better crash.
 
-Blocking must be explicit (exiting a sync scope is implicit - and shared_ptr makes it even more scary). 
-Blocking must be grepable. 
-Blocking must be rare. 
-Blocking is like reinterpret_cast<> - the name should be long and scary. 
-`join()` is a terrible design - this is why async_scope has `on_empty()` instead. 
-Every asychronous lifetime must be managed with non-blocking primitives and only `sync_wait()` is used to block.
+Principles that lead to avoid blocking in the destructor:
 
-## Q why doesn't the async_scope destructor stop all the nested and spawned senders?
+- Blocking must be explicit (exiting a sync scope is implicit -- and `shared_ptr` makes it even more scary). 
+- Blocking must be grepable. 
+- Blocking must be rare. 
+- Blocking is like `reinterpret_cast<>` -- the name should be long and scary. 
+- `join()` is a terrible design -- this is why async_scope has `on_empty()` instead. 
+- Every asynchronous lifetime must be managed with non-blocking primitives and only `sync_wait()` is used to block.
+
+## Why doesn't the `async_scope` destructor stop all the nested and spawned senders?
 
 One author's perspective:
 
-`stop_callback` is not a destructor because:
-`request_stop()` is **asking** for early completion. 
-`request_stop()` does not end the lifetime of the operation, `set_value()`, `set_error()` and `set_stopped()` end the lifetime - those are the destructors for an operation.
-`request_stop()` might result in completion with `set_stopped()`, but `set_value()` and `set_error()` are equally likely. 
+- `stop_callback` is not a destructor because:
+  - `request_stop()` is **asking** for early completion.
+  - `request_stop()` does not end the lifetime of the operation, `set_value()`, `set_error()` and `set_stopped()` end the lifetime -- those are the destructors for an operation.
+  - `request_stop()` might result in completion with `set_stopped()`, but `set_value()` and `set_error()` are equally likely. 
 
 `request_stop()` should not be called from a destructor because:
-If a sync context intends to ask for early completion of an async operation, then it needs to wait for that operation to actually complete before continuing (`set_value()`, `set_error()` and `set_stopped()` are the destructors for the async operation), and sync destructors must not block. see [Q why does async_scope terminate in the destructor instead of blocking like jthread?]. 
+If a sync context intends to ask for early completion of an async operation, then it needs to wait for that operation to actually complete before continuing (`set_value()`, `set_error()` and `set_stopped()` are the destructors for the async operation), and sync destructors must not block.
+See [Why does `async_scope` terminate in the destructor instead of blocking like `jthread`?]. 
 
-> NOTE: async RAII, could be used to signal early completion because it would be composed with other async operation lifetimes. The operation being stopped would complete before the aync RAII operation completed - without any blocking.
+> NOTE: async RAII, could be used to signal early completion because it would be composed with other async operation lifetimes.
+> The operation being stopped would complete before the async RAII operation completed -- without any blocking.
 
 Naming
 ======
