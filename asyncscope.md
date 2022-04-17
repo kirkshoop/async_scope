@@ -266,7 +266,7 @@ While the listening activity is bound in the scope of the loop, the lifetime of 
 We use `async_scope` to limit the lifetime of handling the requests.
 
 ```c++
-auto listener(int port, io_context& ctx, static_thread_pool& pool) -> task<size_t> {
+task<size_t> listener(int port, io_context& ctx, static_thread_pool& pool) {
     listening_socket listen_sock{port};
     async_scope work_scope;
     size_t count{0};
@@ -356,7 +356,7 @@ Please see [Q & A](#q-a) section for more details on reasons why calling `termin
 
 ## `spawn`
 
-`void spawn(sender auto&& s);`
+`template <sender S> void spawn(S&& s);`
 
 Eagerly launches work on the `async_scope`.
 This involves an allocation for the `@_operation-state_@` of the sender until it completes.
@@ -528,9 +528,9 @@ int main() {
 Design considerations
 =====================
 
-## shape of `async_scope`
+## Shape of `async_scope`
 
-### concept vs type
+### Concept vs type
 
 One option is to have a `async_scope` concept that has many implementations.
 
@@ -538,13 +538,16 @@ Another option is to have a type that has one implementation per library vender.
 
 > **Chosen:** Due to time constraints, this paper proposes a type.
 
-### one vs many
+### One vs many
 
 One option would be for `async_scope` to have:
-  `nest(sender) -> @_nest-sender_@`
+
+- `template <sender S>@_nest-sender_@<S> nest(S&&)`
+
 and not
-  `spawn(sender) -> void`
-  `spawn_future(sender) -> @_spawn-future-sender_@<..>`
+
+- `template <sender S> void spawn(S&&)`
+- `template <sender S> @_spawn-future-sender_@<S> spawn_future(S&&)`
 
 This would remove questions of when and how the state is allocated and the operation started from the scope.
 
@@ -556,15 +559,17 @@ Another option is to add `spawn()` and `spawn_future()` methods to `async_scope`
 
 > **Chosen:** Due to time constraints, this paper proposes to add methods for `spawn` and `spawn_future` in addition to `nest`.
 
-### cpo vs method
+### Customization point object vs method
 
-One option is to define cpos for `nest`, `spawn`, `spawn_future` and `on_empty` that operate on anything that customizes those cpos. 
+One option is to define Customization Point Objects for `nest`, `spawn`, `spawn_future` and `on_empty` that operate on anything that customizes those objects. 
 
 Another option is to define a type with `nest`, `spawn`, `spawn_future` and `on_empty` methods.
 
 > **Chosen:** methods on a type.
 
-## Constraints on `set_value`
+## Shape of input senders
+
+### Constraints on `set_value`
 
 It makes sense for `spawn_future()` to accept senders with any type of completion signatures.
 The caller gets back a sender that can be used to be chained with other senders, and it doesn't make sense to restrict the shape of this sender.
@@ -579,9 +584,10 @@ The current proposal goes with the second alternative.
 The main reason for this is that it tries to prevent silent dropping of results.
 The caller can always transform the input sender before passing it to `spawn()` doing the dropping of the values manually.
 
-Thus, `spwan()` accepts only senders that advertize `set_value()` (without any parameters) in the completion signatures.
+> **Chosen:** `spawn()` accepts only senders that advertise `set_value()` (without any parameters) in the completion signatures.
 
-## Handling errors in `spawn`
+
+### Handling errors in `spawn`
 
 The current proposal does not accept senders that can complete with error.
 This will prevent accidental errors scenarios that will terminate the application.
@@ -594,7 +600,10 @@ This was dropped because explicit error handling is preferred to stopping the ap
 Another alternative is to silently drop the errors when receiving them.
 This is considered bad practice, as it will often lead to spotting bugs to late.
 
-## Handling stop signals in `spawn`
+> **Chosen:** `spawn()` accepts only senders that do not call `set_error()`.
+
+
+### Handling stop signals in `spawn`
 
 Similar to the error case, we have the alternative of allowing or forbidding `set_stopped` as a completion signal.
 Because the goal of `async_scope` is to track the lifetime of the work started through it, it shouldn't matter whether that the work completed with success or by being stopped.
@@ -603,35 +612,59 @@ As it is assumed that sending the stop signal is the result of an explicit choic
 The alternative would require transforming the sender before passing it to spawn, something like `s.spawn(std::move(snd) | let_stopped([]{ return just_stopped(); ))`.
 This is considered boilerplate and not helpful, as the stopped scenarios should be explicit, and not exceptional.
 
+> **Chosen:** `spawn()` accepts senders that complete with `set_stopped()`.
+
+
+### No shape restrictions for the senders passed to `spawn_future` and `nest`
+
+Similarly to `spawn()`, we can constrain `spawn_future()` and `nest()` to accept only a limited set of senders.
+But, because we can attach continuations for these senders, we would be limiting the functionality that can be expressed.
+For example, the continuation can react at different types of values and errors.
+
+> **Chosen:** `spawn_future()` and `nest()` accepts senders with any completion signatures.
+
 ## Stop handling
 
 The paper requires that if the caller requests stop to an `async_scope` object, then this request is forwarded to the nested and spawned senders.
 
-### `request_stop` on the `async_scope` is forwarded
+### Alternative 1: `request_stop` on the `async_scope` is forwarded
 
 When stop is requested to `async_scope`, then stop is also requested to operations that are not yet complete.
 While this can be a good thing in many contexts, it is not the best strategy in all cases.
 
 Consider an `async_scope` that is used to keep track of the work needed to handle requests.
-When trying to gracefully shut down the application, one might need to drain the existing requests without stopping their processing. The way to do that is to use the `@_on-empty-sender_@` without stopping the `async_scope`.
+When trying to gracefully shut down the application, one might need to drain the existing requests without stopping their processing.
+The way to do that is to use the `@_on-empty-sender_@` without stopping the `async_scope`.
 
-Consider `spawn()` in isolation. Forwarding the cancellation of the `async_scope` to the spawned senders would be natural.
+Consider `spawn()` in isolation.
+Forwarding the cancellation of the `async_scope` to the spawned senders would be natural.
 
-Consider `nest()` and `spawn_future()`. They must combine two potential stop tokens. One from the `async_scope` and the other from the receiver passed to the returned `@_nest-sender_@` and `@_spawn-future-sender_@`. The semantics would be that either stop token would cancel the sender and would not stop the `async_scope`s `stop_source`.
+Consider `nest()` and `spawn_future()`.
+They must combine two potential stop tokens.
+One from the `async_scope` and the other from the receiver passed to the returned `@_nest-sender_@` and `@_spawn-future-sender_@`.
+The semantics would be that either stop token would cancel the sender and would not stop the `async_scope`s `stop_source`.
 
-Consider the use case where a reference to an `async_scope` is provided to many nested operations and functions to attach senders that they produce. Some of those senders may restore an invariant in a file-system or some other system. The way for a nested operation and function to make sure that the invariant is not corrupted by a forwarded stop request from the `async_scope`, is to apply a `never_stoppable_token` to their sender to hide the token provided by the `async_scope`.
+Consider the use case where a reference to an `async_scope` is provided to many nested operations and functions to attach senders that they produce.
+Some of those senders may restore an invariant in a file-system or some other system.
+The way for a nested operation and function to make sure that the invariant is not corrupted by a forwarded stop request from the `async_scope`, is to apply a `never_stoppable_token` to their sender to hide the token provided by the `async_scope`.
 
-### `request_stop` on the `async_scope` is not forwarded
+### Alternative 2: `request_stop` on the `async_scope` is not forwarded
 
-A motivation for not forwarding a stop request was that a `stop_callback` is not a destructor, it is a signal requesting running work to stop. If `request_stop()` was called within the `async_scope` destructor, or any other destructor, then those destructors would be expected to block until an `@_on-empty-sender_@` completed. As falling off a scope or having a shared_ptr count reach 0 is implicit, it is very difficult to ensure that a `request_stop()` followed by starting an `@_on-empty-sender_@` would not have a race with concurrent calls to `nest()`, `spawn()` and `spawn_future()`. 
+A motivation for not forwarding a stop request was that a `stop_callback` is not a destructor, it is a signal requesting running work to stop.
+If `request_stop()` was called within the `async_scope` destructor, or any other destructor, then those destructors would be expected to block until an `@_on-empty-sender_@` completed.
+As falling off a scope or having a shared_ptr count reach 0 is implicit, it is very difficult to ensure that a `request_stop()` followed by starting an `@_on-empty-sender_@` would not have a race with concurrent calls to `nest()`, `spawn()` and `spawn_future()`. 
 
-### inverting the forwarding default
+### Inverting the forwarding default
 
 Either of the two cases can be simulated with the help of the other case.
 
 Example: When cancellation is not forwarded and forwarding is wanted, inject the same `stop_token` into all the spawned senders that need to be cancelled. 
 
 Example: When cancellation is forwarded and forwarding is not wanted, mask the receiver provided `stop_token` by injecting a `never_stoppable_token` into all the spawned senders that need to complete even when cancelled. 
+
+### Result
+
+> **Chosen:** `request_stop` on the `async_scope` is forwarded.
 
 ## Uses in other concurrent abstractions
 
