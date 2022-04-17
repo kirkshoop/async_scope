@@ -308,7 +308,7 @@ The requirements for the async scope are:
  - An `async_scope` must provide an `@_on-empty-sender_@` that completes when all spawned senders are complete.
  - An `async_scope` must constrain `spawn()` and `spawn_future()` must start the given sender before they exit.
 
-More on these items can be found below in the [Design considerations](#design-considerations) section.
+More on these items can be found below in the sections below.
 
 ## Definitions
 
@@ -320,28 +320,22 @@ struct async_scope {
     async_scope& operator=(const async_scope&) = delete;
     async_scope& operator=(async_scope&&) = delete;
 
-    template <sender S>
-    void spawn(S&&);
+    template <sender_to<@_spawn-receiver_@> S>
+    void spawn(S&& snd);
 
     template <sender S>
-    @_spawn-future-sender_@<S> spawn_future(S&&);
+    @_spawn-future-sender_@<S> spawn_future(S&& snd);
 
     template <sender S>
-    @_nest-sender_@<S> nest(S&&);
+    @_nest-sender_@<S> nest(S&& snd);
 
-    @_on-empty-sender_@<S> on_empty() const noexcept;
-
+    [[nodiscard]]
+    @_on-empty-sender_@ on_empty() const noexcept;
+    
     in_place_stop_source& get_stop_source() noexcept;
     in_place_stop_token get_stop_token() const noexcept;
     void request_stop() noexcept;
 };
-
-template<typename S>
-struct @_nest-sender_@; // @_see below_@
-template<typename S>
-struct @_spawn-future-sender_@; // @_see below_@
-template<typename S>
-struct @_on-empty-sender_@; // @_see below_@
 ```
 
 ## Lifetime
@@ -356,7 +350,9 @@ Please see [Q & A](#q-a) section for more details on reasons why calling `termin
 
 ## `spawn`
 
-`template <sender S> void spawn(S&& s);`
+```c++
+template <sender S> void spawn(S&& s);
+```
 
 Eagerly launches work on the `async_scope`.
 This involves an allocation for the `@_operation-state_@` of the sender until it completes.
@@ -384,7 +380,9 @@ return s.on_empty(); // completes when all work is done
 
 ## `spawn_future`
 
-`template <sender S> @_spawn-future-sender_@<S> spawn_future(S&& s);`
+```c++
+template <sender S> @_spawn-future-sender_@<S> spawn_future(S&& s);
+```
 
 Eagerly launches work on the `async_scope` but returns a `@_spawn-future-sender_@` that represents an eagerly running task.
 This involves an allocation for the `@_operation-state_@` of the sender, until it completes, and synchronization to resolve the race between the production of the result and the consumption of the result.
@@ -416,7 +414,9 @@ return when_all(s.on_empty(), std::move(snd));
 
 ## `nest`
 
-`template <sender S> @_nest-sender_@<S> nest(S&& s);`
+```c++
+template <sender S> @_nest-sender_@<S> nest(S&& s);
+```
 
 Returns a `@_nest-sender_@` that extends the lifetime of the `async_scope` that produced it to include the lifetime of the `@_nest-sender_@` object and, if started, the lifetime of the given sender operation.
 
@@ -450,7 +450,9 @@ return when_all(s.on_empty(), std::move(snd)); // OK, completing snd will also c
 
 ## Empty detection
 
-`@_on-empty-sender_@<S> on_empty() const noexcept;`
+```c++
+@_on-empty-sender_@<S> on_empty() const noexcept;
+```
 
 An `async_scope` object is considered to be *non-empty* when there are spawned senders that haven't completed yet, or there are senders created with `async_scope` that are in flight.  
 The object is considered *empty* otherwise.
@@ -484,7 +486,10 @@ sender auto run_in_parallel(int num_jobs, async_scope& scope, scheduler auto& sc
 
 ## Stopping `async_scope`
 
-`in_place_stop_source& get_stop_source() noexcept;`
+```c++
+in_place_stop_source& get_stop_source() noexcept;
+```
+
 
 Returns a `in_place_stop_source` associated with the `async_scope`'s `stop_token`.
 This `in_place_stop_source` will trigger the `in_place_stop_token`, and will cause future calls to `nest()`, `spawn()` and `spawn_future()` to start with a `in_place_stop_token` that is already in the `stop_requested()` state.
@@ -492,7 +497,9 @@ This `in_place_stop_source` will trigger the `in_place_stop_token`, and will cau
 Calling `request_stop` on the returned `stop_source` will forward that request to all the nested and spawned senders.
 
 
-`in_place_stop_token get_stop_token() const noexcept;`
+```c++
+in_place_stop_token get_stop_token() const noexcept;
+```
 
 Equivalent to calling `get_stop_source().get_token()`.
 
@@ -500,7 +507,9 @@ Returns the `in_place_stop_token` associated with the `async_scope`.
 This will report stopped when the `stop_source` is stopped or `request_stop()` is called.
 The `in_place_stop_token` is provided to all nested and spawned senders to respond to a stop request.
 
-`void request_stop() noexcept;`
+```c++
+void request_stop() noexcept;
+```
 
 Equivalent to calling `get_stop_source().request_stop()`.
 
@@ -684,15 +693,17 @@ struct serializer {
     serializer& operator=(const serializer&) = delete;
     serializer& operator=(serializer&&) = delete;
 
-    auto spawn(sender auto&& snd) -> void;
-    auto spawn_future(sender auto&& snd) -> @_spawn-future-sender_@<S>;
+    template <sender S>
+    void spawn(S&& snd);
+    template <sender S>
+    @_spawn-future-sender_@<S> spawn_future(S&& snd);
 
     [[nodiscard]]
-    auto on_empty() const noexcept -> @_on-empty-sender_@;
+    @_on-empty-sender_@ on_empty() const noexcept;
     
-    auto get_stop_source() noexcept -> in_place_stop_source&;
-    auto get_stop_token() const noexcept -> in_place_stop_token;
-    auto request_stop() noexcept -> void;
+    in_place_stop_source& get_stop_source() noexcept;
+    in_place_stop_token get_stop_token() const noexcept;
+    void request_stop() noexcept;
 };
 ```
 
@@ -868,9 +879,9 @@ Specification
 namespace std::execution {
 
 namespace { // @_exposition-only_@ 
-    struct @_async-scope-receiver_@ // @_exposition-only_@
-        friend void set_value(@_async-scope-receiver_@) noexcept;
-        friend void set_stopped(@_async-scope-receiver_@) noexcept;
+    struct @_spawn-receiver_@ { // @_exposition-only_@
+        friend void set_value(@_spawn-receiver_@) noexcept;
+        friend void set_stopped(@_spawn-receiver_@) noexcept;
     };
     template <typename S>
     struct @_nest-sender_@; // @_exposition-only_@
@@ -891,21 +902,21 @@ struct async_scope {
     async_scope& operator=(const async_scope&) = delete;
     async_scope& operator=(async_scope&&) = delete;
 
-    template <sender_to<@_async-scope-receiver_@> S>
-    auto spawn(S&& snd) -> void;
+    template <sender_to<@_spawn-receiver_@> S>
+    void spawn(S&& snd);
 
     template <sender S>
-    auto spawn_future(S&& snd) -> @_spawn-future-sender_@<S>;
+    @_spawn-future-sender_@<S> spawn_future(S&& snd);
 
     template <sender S>
-    auto nest(S&& snd) -> @_nest-sender_@<S>;
+    @_nest-sender_@<S> nest(S&& snd);
 
     [[nodiscard]]
-    auto on_empty() const noexcept -> @_on-empty-sender_@;
+    @_on-empty-sender_@ on_empty() const noexcept;
     
-    auto get_stop_source() noexcept -> in_place_stop_source&;
-    auto get_stop_token() const noexcept -> in_place_stop_token;
-    auto request_stop() noexcept -> void;
+    in_place_stop_source& get_stop_source() noexcept;
+    in_place_stop_token get_stop_token() const noexcept;
+    void request_stop() noexcept;
 };
 
 }
@@ -923,7 +934,7 @@ struct async_scope {
 
 1. `async_scope::spawn` is used to eagerly start a sender while keeping the execution in the lifetime of the `async_scope` object.
 2. *Effects*:
-   - An `@_operation-state_@` object `op` will be created by connecting the given sender to a receiver `recv` of type `@_async-scope-receiver_@`.
+   - An `@_operation-state_@` object `op` will be created by connecting the given sender to a receiver `recv` of type `@_spawn-receiver_@`.
    - If an exception occurs will be trying to create `op` in its proper storage space, the exception will be passed to the caller.
    - If no exception is thrown while creating `op` and stop was not requested on our stop source, then:
      - `start(op)` is called (before `spawn()` returns).
