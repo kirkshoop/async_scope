@@ -240,13 +240,13 @@ sender auto process(scheduler auto sch, tabular_data& data) {
                   | let_value([&]{
                       for(int i = 0; i < data.num_rows(); ++i)
                         scope.spawn(on(sch, process_row(data, i)));
-                      return scope.empty();
+                      return scope.on_empty();
                   })
                   // third phase: process the data by columns, in parallel
                   | let_value([&]{
                       for(int i = 0; i < data.num_cols(); ++i)
                         scope.spawn(on(sch, process_col(data, i)));
-                      return scope.empty();
+                      return scope.on_empty();
                   })
                   // fourth phase: postprocess the data
                   | let_value([&]{ return postprocess(data); })
@@ -300,12 +300,12 @@ Async Scope, usage guide
 The requirements for the async scope are:
 
  - An `async_scope` must be non-movable and non-copyable.
- - An `async_scope` must be empty when the destructor runs.
+ - An `async_scope` must be *empty* when the destructor runs.
  - An `async_scope` must introduce a cancellation scope.
  - An `async_scope` must not provide any query CPO's on the receiver passed to the sender, other than `get_stop_token()` (in order to forward cancellation of the async_scope `stop_source` to all nested and spawned senders).
  - An `async_scope` must allow an arbitrary sender to be nested within the scope without eagerly starting the sender (`nest()`).
  - An `async_scope` must constrain `spawn()` and `spawn_future()` to accept only senders that are never-blocking.
- - An `async_scope` must constrain `spawn()` to accept only senders that complete with void.
+ - An `async_scope` must constrain `spawn()` to accept only senders that complete with `void`.
  - An `async_scope` must provide an `@_on-empty-sender_@` that completes when all spawned senders are complete.
  - An `async_scope` must constrain `spawn()` and `spawn_future()` must start the given sender before they exit.
 
@@ -382,7 +382,7 @@ return s.on_empty(); // completes when all work is done
 ```
 
 
-## spawn_future
+## `spawn_future`
 
 `template <sender S> @_spawn-future-sender_@<S> spawn_future(S&& s);`
 
@@ -448,12 +448,15 @@ for ( int i=0; i<10; i++)
 return when_all(s.on_empty(), std::move(snd)); // OK, completing snd will also complete s.on_empty()
 ```
 
-## empty detection
+## Empty detection
 
 `@_on-empty-sender_@<S> on_empty() const noexcept;`
 
-`@_on-empty-sender_@` completes with `void` when all spawned senders have completed and no senders are in flight in the `async_scope`.
-An `async_scope` can be empty more than once.
+An `async_scope` object is considered to be *non-empty* when there are spawned senders that haven't completed yet, or there are senders created with `async_scope` that are in flight.  
+The object is considered *empty* otherwise.
+An `async_scope` can be *empty* more than once.
+
+`@_on-empty-sender_@` completes with `void` when all the `async_scope` object becomes *empty*.
 The intended usage is to spawn all the senders and then start the `@_on-empty-sender_@` to know when all spawned senders have completed.
 
 To safely destroy the `async_scope` object it's recommended to use `@_on-empty-sender_@` to get notified when the scope object finished executing all the work.
@@ -883,10 +886,10 @@ struct async_scope {
    - An `@_operation-state_@` object `op` will be created by connecting the given sender to a receiver `recv` of type `@_async-scope-receiver_@`.
    - If an exception occurs will be trying to create `op` in its proper storage space, the exception will be passed to the caller.
    - If no exception is thrown while creating `op` and stop was not requested on our stop source, then:
-     - `start(op)` is called.
-     - *Note*: it is not required for `start(op)` to be called before `spawn()` returns. 
+     - `start(op)` is called (before `spawn()` returns).
      - The lifetime of `op` extends at least until `recv` is called with a completion notification.
      - If the given work calls `set_error()` on `recv` then `std::terminate()` will be called.
+   - `recv` supports the `get_stop_token()` query customization point object; this will return the stop token associated with `async_scope` object.
 3. *Note*: the receiver will help the `async_scope` object to keep track of how many operations are running at a given time. 
 
 ## `async_scope::spawn_future`
@@ -900,13 +903,15 @@ struct async_scope {
    - An `@_operation-state_@` object `op` will be created by connecting the given sender to a receiver `recv`.
    - If an exception occurs will be trying to create `op` in its proper storage space, the exception will be passed to the caller.
    - If no exception is thrown while creating `op` and stop was not requested on our stop source, then:
-     - `start(op)` is called.
-     - *Note*: it is not required for `start(op)` to be called before `spawn()` returns. 
+     - `start(op)` is called (before `spawn_future` returns).
      - The lifetime of `op` extends at least until `recv` is called with a completion notification.
      - If `rsnd` is the returned sender, then using it has the following effects:
        - Let `ext_op` be the `@_operation-state_@` object returned by connecting `rsnd` to a receiver `ext_recv`.
        - If `ext_op` is started, the completion notifications received by `recv` will be forwarded to `ext_recv`, regardless whether the completion notification happened before starting `ext_op` or not.
        - It is safe not to connect `rsnd` or not to start `ext_op`.
+   - `recv` supports the `get_stop_token()` query customization point object; this will return a stop token object that will be stopped when:
+     - the `async_scope` object is stopped (i.e., by using `async_scope::request_stop()`;
+     - if `rsnd` supports  `get_stop_token()` query customization point object, when stop is requested to the object `get_stop_token(rsnd)`.
 
 4. *Note*: the receiver `recv` will help the `async_scope` object to keep track of how many operations are running at a given time.
 
@@ -934,6 +939,9 @@ struct async_scope {
      - `rsnd` is destroyed without being connected
      - `rsnd` is connected but `ext_op` is destroyed without being started
      - `ext_op` is started, and `recv` is notified about the completion of the given sender
+   - `recv` supports the `get_stop_token()` query customization point object; this will return a stop token object that will be stopped when:
+     - the `async_scope` object is stopped (i.e., by using `async_scope::request_stop()`;
+     - if `rsnd` supports  `get_stop_token()` query customization point object, when stop is requested to the object `get_stop_token(rsnd)`.
     
 4. *Note*: the type of completion signal that `op` will use does not influence the behavior of `async_scope` (i.e., `async_scope` object behaves the same way if the sender describes a work that ends with success, error or cancellation).
 
