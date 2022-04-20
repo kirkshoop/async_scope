@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="mpark/wg21" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="dcterms.date" content="2022-04-20" />
+  <title>async\_scope - Creating scopes for non-sequential concurrency</title>
+  <style>
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+      div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+      ul.task-list{list-style: none;}
+      pre > code.sourceCode { white-space: pre; position: relative; }
+      pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+      pre > code.sourceCode > span:empty { height: 1.2em; }
+      code.sourceCode > span { color: inherit; text-decoration: inherit; }
+      div.sourceCode { margin: 1em 0; }
+      pre.sourceCode { margin: 0; }
+      @media screen {
+      div.sourceCode { overflow: auto; }
+      }
+      @media print {
+      pre > code.sourceCode { white-space: pre-wrap; }
+      pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+      }
+      pre.numberSource code
+        { counter-reset: source-line 0; }
+      pre.numberSource code > span
+        { position: relative; left: -4em; counter-increment: source-line; }
+      pre.numberSource code > span > a:first-child::before
+        { content: counter(source-line);
+          position: relative; left: -1em; text-align: right; vertical-align: baseline;
+          border: none; display: inline-block;
+          -webkit-touch-callout: none; -webkit-user-select: none;
+          -khtml-user-select: none; -moz-user-select: none;
+          -ms-user-select: none; user-select: none;
+          padding: 0 4px; width: 4em;
+          color: #aaaaaa;
+        }
+      pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+      div.sourceCode
+        {  background-color: #f6f8fa; }
+      @media screen {
+      pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+      }
+      code span. { } /* Normal */
+      code span.al { color: #ff0000; } /* Alert */
+      code span.an { } /* Annotation */
+      code span.at { } /* Attribute */
+      code span.bn { color: #9f6807; } /* BaseN */
+      code span.bu { color: #9f6807; } /* BuiltIn */
+      code span.cf { color: #00607c; } /* ControlFlow */
+      code span.ch { color: #9f6807; } /* Char */
+      code span.cn { } /* Constant */
+      code span.co { color: #008000; font-style: italic; } /* Comment */
+      code span.cv { color: #008000; font-style: italic; } /* CommentVar */
+      code span.do { color: #008000; } /* Documentation */
+      code span.dt { color: #00607c; } /* DataType */
+      code span.dv { color: #9f6807; } /* DecVal */
+      code span.er { color: #ff0000; font-weight: bold; } /* Error */
+      code span.ex { } /* Extension */
+      code span.fl { color: #9f6807; } /* Float */
+      code span.fu { } /* Function */
+      code span.im { } /* Import */
+      code span.in { color: #008000; } /* Information */
+      code span.kw { color: #00607c; } /* Keyword */
+      code span.op { color: #af1915; } /* Operator */
+      code span.ot { } /* Other */
+      code span.pp { color: #6f4e37; } /* Preprocessor */
+      code span.re { } /* RegionMarker */
+      code span.sc { color: #9f6807; } /* SpecialChar */
+      code span.ss { color: #9f6807; } /* SpecialString */
+      code span.st { color: #9f6807; } /* String */
+      code span.va { } /* Variable */
+      code span.vs { color: #9f6807; } /* VerbatimString */
+      code span.wa { color: #008000; font-weight: bold; } /* Warning */
+      code.diff {color: #898887}
+      code.diff span.va {color: #006e28}
+      code.diff span.st {color: #bf0303}
+  </style>
+  <style type="text/css">
+body {
+margin: 5em;
+font-family: serif;
+
+hyphens: auto;
+line-height: 1.35;
+}
+div.wrapper {
+max-width: 60em;
+margin: auto;
+}
+ul {
+list-style-type: none;
+padding-left: 2em;
+margin-top: -0.2em;
+margin-bottom: -0.2em;
+}
+a {
+text-decoration: none;
+color: #4183C4;
+}
+a.hidden_link {
+text-decoration: none;
+color: inherit;
+}
+li {
+margin-top: 0.6em;
+margin-bottom: 0.6em;
+}
+h1, h2, h3, h4 {
+position: relative;
+line-height: 1;
+}
+a.self-link {
+position: absolute;
+top: 0;
+left: calc(-1 * (3.5rem - 26px));
+width: calc(3.5rem - 26px);
+height: 2em;
+text-align: center;
+border: none;
+transition: opacity .2s;
+opacity: .5;
+font-family: sans-serif;
+font-weight: normal;
+font-size: 83%;
+}
+a.self-link:hover { opacity: 1; }
+a.self-link::before { content: "§"; }
+ul > li:before {
+content: "\2014";
+position: absolute;
+margin-left: -1.5em;
+}
+:target { background-color: #C9FBC9; }
+:target .codeblock { background-color: #C9FBC9; }
+:target ul { background-color: #C9FBC9; }
+.abbr_ref { float: right; }
+.folded_abbr_ref { float: right; }
+:target .folded_abbr_ref { display: none; }
+:target .unfolded_abbr_ref { float: right; display: inherit; }
+.unfolded_abbr_ref { display: none; }
+.secnum { display: inline-block; min-width: 35pt; }
+.header-section-number { display: inline-block; min-width: 35pt; }
+.annexnum { display: block; }
+div.sourceLinkParent {
+float: right;
+}
+a.sourceLink {
+position: absolute;
+opacity: 0;
+margin-left: 10pt;
+}
+a.sourceLink:hover {
+opacity: 1;
+}
+a.itemDeclLink {
+position: absolute;
+font-size: 75%;
+text-align: right;
+width: 5em;
+opacity: 0;
+}
+a.itemDeclLink:hover { opacity: 1; }
+span.marginalizedparent {
+position: relative;
+left: -5em;
+}
+li span.marginalizedparent { left: -7em; }
+li ul > li span.marginalizedparent { left: -9em; }
+li ul > li ul > li span.marginalizedparent { left: -11em; }
+li ul > li ul > li ul > li span.marginalizedparent { left: -13em; }
+div.footnoteNumberParent {
+position: relative;
+left: -4.7em;
+}
+a.marginalized {
+position: absolute;
+font-size: 75%;
+text-align: right;
+width: 5em;
+}
+a.enumerated_item_num {
+position: relative;
+left: -3.5em;
+display: inline-block;
+margin-right: -3em;
+text-align: right;
+width: 3em;
+}
+div.para { margin-bottom: 0.6em; margin-top: 0.6em; text-align: justify; }
+div.section { text-align: justify; }
+div.sentence { display: inline; }
+span.indexparent {
+display: inline;
+position: relative;
+float: right;
+right: -1em;
+}
+a.index {
+position: absolute;
+display: none;
+}
+a.index:before { content: "⟵"; }
+
+a.index:target {
+display: inline;
+}
+.indexitems {
+margin-left: 2em;
+text-indent: -2em;
+}
+div.itemdescr {
+margin-left: 3em;
+}
+.bnf {
+font-family: serif;
+margin-left: 40pt;
+margin-top: 0.5em;
+margin-bottom: 0.5em;
+}
+.ncbnf {
+font-family: serif;
+margin-top: 0.5em;
+margin-bottom: 0.5em;
+margin-left: 40pt;
+}
+.ncsimplebnf {
+font-family: serif;
+font-style: italic;
+margin-top: 0.5em;
+margin-bottom: 0.5em;
+margin-left: 40pt;
+background: inherit; 
+}
+span.textnormal {
+font-style: normal;
+font-family: serif;
+white-space: normal;
+display: inline-block;
+}
+span.rlap {
+display: inline-block;
+width: 0px;
+}
+span.descr { font-style: normal; font-family: serif; }
+span.grammarterm { font-style: italic; }
+span.term { font-style: italic; }
+span.terminal { font-family: monospace; font-style: normal; }
+span.nonterminal { font-style: italic; }
+span.tcode { font-family: monospace; font-style: normal; }
+span.textbf { font-weight: bold; }
+span.textsc { font-variant: small-caps; }
+a.nontermdef { font-style: italic; font-family: serif; }
+span.emph { font-style: italic; }
+span.techterm { font-style: italic; }
+span.mathit { font-style: italic; }
+span.mathsf { font-family: sans-serif; }
+span.mathrm { font-family: serif; font-style: normal; }
+span.textrm { font-family: serif; }
+span.textsl { font-style: italic; }
+span.mathtt { font-family: monospace; font-style: normal; }
+span.mbox { font-family: serif; font-style: normal; }
+span.ungap { display: inline-block; width: 2pt; }
+span.textit { font-style: italic; }
+span.texttt { font-family: monospace; }
+span.tcode_in_codeblock { font-family: monospace; font-style: normal; }
+span.phantom { color: white; }
+
+span.math { font-style: normal; }
+span.mathblock {
+display: block;
+margin-left: auto;
+margin-right: auto;
+margin-top: 1.2em;
+margin-bottom: 1.2em;
+text-align: center;
+}
+span.mathalpha {
+font-style: italic;
+}
+span.synopsis {
+font-weight: bold;
+margin-top: 0.5em;
+display: block;
+}
+span.definition {
+font-weight: bold;
+display: block;
+}
+.codeblock {
+margin-left: 1.2em;
+line-height: 127%;
+}
+.outputblock {
+margin-left: 1.2em;
+line-height: 127%;
+}
+div.itemdecl {
+margin-top: 2ex;
+}
+code.itemdeclcode {
+white-space: pre;
+display: block;
+}
+span.textsuperscript {
+vertical-align: super;
+font-size: smaller;
+line-height: 0;
+}
+.footnotenum { vertical-align: super; font-size: smaller; line-height: 0; }
+.footnote {
+font-size: small;
+margin-left: 2em;
+margin-right: 2em;
+margin-top: 0.6em;
+margin-bottom: 0.6em;
+}
+div.minipage {
+display: inline-block;
+margin-right: 3em;
+}
+div.numberedTable {
+text-align: center;
+margin: 2em;
+}
+div.figure {
+text-align: center;
+margin: 2em;
+}
+table {
+border: 1px solid black;
+border-collapse: collapse;
+margin-left: auto;
+margin-right: auto;
+margin-top: 0.8em;
+text-align: left;
+hyphens: none; 
+}
+td, th {
+padding-left: 1em;
+padding-right: 1em;
+vertical-align: top;
+}
+td.empty {
+padding: 0px;
+padding-left: 1px;
+}
+td.left {
+text-align: left;
+}
+td.right {
+text-align: right;
+}
+td.center {
+text-align: center;
+}
+td.justify {
+text-align: justify;
+}
+td.border {
+border-left: 1px solid black;
+}
+tr.rowsep, td.cline {
+border-top: 1px solid black;
+}
+tr.even, tr.odd {
+border-bottom: 1px solid black;
+}
+tr.capsep {
+border-top: 3px solid black;
+border-top-style: double;
+}
+tr.header {
+border-bottom: 3px solid black;
+border-bottom-style: double;
+}
+th {
+border-bottom: 1px solid black;
+}
+span.centry {
+font-weight: bold;
+}
+div.table {
+display: block;
+margin-left: auto;
+margin-right: auto;
+text-align: center;
+width: 90%;
+}
+span.indented {
+display: block;
+margin-left: 2em;
+margin-bottom: 1em;
+margin-top: 1em;
+}
+ol.enumeratea { list-style-type: none; background: inherit; }
+ol.enumerate { list-style-type: none; background: inherit; }
+
+code.sourceCode > span { display: inline; }
+</style>
+  <link href="data:image/x-icon;base64,AAABAAIAEBAAAAEAIABoBAAAJgAAACAgAAABACAAqBAAAI4EAAAoAAAAEAAAACAAAAABACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA////AIJEAACCRAAAgkQAAIJEAACCRAAAgkQAVoJEAN6CRADegkQAWIJEAACCRAAAgkQAAIJEAACCRAAA////AP///wCCRAAAgkQAAIJEAACCRAAsgkQAvoJEAP+CRAD/gkQA/4JEAP+CRADAgkQALoJEAACCRAAAgkQAAP///wD///8AgkQAAIJEABSCRACSgkQA/IJEAP99PQD/dzMA/3czAP99PQD/gkQA/4JEAPyCRACUgkQAFIJEAAD///8A////AHw+AFiBQwDqgkQA/4BBAP9/PxP/uZd6/9rJtf/bybX/upd7/39AFP+AQQD/gkQA/4FDAOqAQgBc////AP///wDKklv4jlEa/3o7AP+PWC//8+3o///////////////////////z7un/kFox/35AAP+GRwD/mVYA+v///wD///8A0Zpk+NmibP+0d0T/8evj///////+/fv/1sKz/9bCs//9/fr//////+/m2/+NRwL/nloA/5xYAPj///8A////ANKaZPjRmGH/5cKh////////////k149/3UwAP91MQD/lmQ//86rhv+USg3/m1YA/5hSAP+bVgD4////AP///wDSmmT4zpJY/+/bx///////8+TV/8mLT/+TVx//gkIA/5lVAP+VTAD/x6B//7aEVv/JpH7/s39J+P///wD///8A0ppk+M6SWP/u2sf///////Pj1f/Nj1T/2KFs/8mOUv+eWhD/lEsA/8aee/+0glT/x6F7/7J8Rvj///8A////ANKaZPjRmGH/48Cf///////+/v7/2qt//82PVP/OkFX/37KJ/86siv+USg7/mVQA/5hRAP+bVgD4////AP///wDSmmT40ppk/9CVXP/69O////////7+/v/x4M//8d/P//7+/f//////9u7n/6tnJf+XUgD/nFgA+P///wD///8A0ppk+NKaZP/RmWL/1qNy//r07///////////////////////+vXw/9akdP/Wnmn/y5FY/6JfFvj///8A////ANKaZFTSmmTo0ppk/9GYYv/Ql1//5cWm//Hg0P/x4ND/5cWm/9GXYP/RmGH/0ppk/9KaZOjVnmpY////AP///wDSmmQA0ppkEtKaZI7SmmT60ppk/9CWX//OkVb/zpFW/9CWX//SmmT/0ppk/NKaZJDSmmQS0ppkAP///wD///8A0ppkANKaZADSmmQA0ppkKtKaZLrSmmT/0ppk/9KaZP/SmmT/0ppkvNKaZCrSmmQA0ppkANKaZAD///8A////ANKaZADSmmQA0ppkANKaZADSmmQA0ppkUtKaZNzSmmTc0ppkVNKaZADSmmQA0ppkANKaZADSmmQA////AP5/AAD4HwAA4AcAAMADAACAAQAAgAEAAIABAACAAQAAgAEAAIABAACAAQAAgAEAAMADAADgBwAA+B8AAP5/AAAoAAAAIAAAAEAAAAABACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA////AP///wCCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAAyCRACMgkQA6oJEAOqCRACQgkQAEIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAAA////AP///wD///8A////AIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRABigkQA5oJEAP+CRAD/gkQA/4JEAP+CRADqgkQAZoJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAAD///8A////AP///wD///8AgkQAAIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAA4gkQAwoJEAP+CRAD/gkQA/4JEAP+CRAD/gkQA/4JEAP+CRAD/gkQAxIJEADyCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAAAgkQAAP///wD///8A////AP///wCCRAAAgkQAAIJEAACCRAAAgkQAAIJEAACCRAAWgkQAmIJEAP+CRAD/gkQA/4JEAP+CRAD/gkQA/4JEAP+CRAD/gkQA/4JEAP+CRAD/gkQA/4JEAJyCRAAYgkQAAIJEAACCRAAAgkQAAIJEAACCRAAA////AP///wD///8A////AIJEAACCRAAAgkQAAIJEAACCRAAAgkQAdIJEAPCCRAD/gkQA/4JEAP+CRAD/gkQA/4JEAP+CRAD/gkQA/4JEAP+CRAD/gkQA/4JEAP+CRAD/gkQA/4JEAPSCRAB4gkQAAIJEAACCRAAAgkQAAIJEAAD///8A////AP///wD///8AgkQAAIJEAACCRAAAgkQASoJEANKCRAD/gkQA/4JEAP+CRAD/g0YA/39AAP9zLgD/bSQA/2shAP9rIQD/bSQA/3MuAP9/PwD/g0YA/4JEAP+CRAD/gkQA/4JEAP+CRADUgkQAToJEAACCRAAAgkQAAP///wD///8A////AP///wB+PwAAgkUAIoJEAKiCRAD/gkQA/4JEAP+CRAD/hEcA/4BBAP9sIwD/dTAA/5RfKv+viF7/vp56/76ee/+wiF7/lWAr/3YxAP9sIwD/f0AA/4RHAP+CRAD/gkQA/4JEAP+CRAD/gkQArIJEACaBQwAA////AP///wD///8A////AIBCAEBzNAD6f0EA/4NFAP+CRAD/gkQA/4VIAP92MwD/bSUA/6N1Tv/ezsL/////////////////////////////////38/D/6V3Uv9uJgD/dTEA/4VJAP+CRAD/gkQA/4JEAP+BQwD/fUAA/4FDAEj///8A////AP///wD///8AzJRd5qBlKf91NgD/dDUA/4JEAP+FSQD/cy4A/3YyAP/PuKP//////////////////////////////////////////////////////9K7qP94NQD/ciwA/4VJAP+CRAD/fkEA/35BAP+LSwD/mlYA6v///wD///8A////AP///wDdpnL/4qx3/8KJUv+PUhf/cTMA/3AsAP90LgD/4dK+/////////////////////////////////////////////////////////////////+TYxf91MAD/dTIA/31CAP+GRwD/llQA/6FcAP+gWwD8////AP///wD///8A////ANGZY/LSm2X/4ap3/92mcP+wdT3/byQA/8mwj////////////////////////////////////////////////////////////////////////////+LYxv9zLgP/jUoA/59bAP+hXAD/nFgA/5xYAPL///8A////AP///wD///8A0ppk8tKaZP/RmWL/1p9q/9ubXv/XqXj////////////////////////////7+fD/vZyG/6BxS/+gcUr/vJuE//r37f//////////////////////3MOr/5dQBf+dVQD/nVkA/5xYAP+cWAD/nFgA8v///wD///8A////AP///wDSmmTy0ppk/9KaZP/SmWP/yohJ//jo2P//////////////////////4NTG/4JDFf9lGAD/bSQA/20kAP9kGAD/fz8S/+Xb0f//////5NG9/6txN/+LOgD/m1QA/51aAP+cWAD/m1cA/5xYAP+cWADy////AP///wD///8A////ANKaZPLSmmT/0ppk/8+TWf/Unmv//v37//////////////////////+TWRr/VwsA/35AAP+ERgD/g0UA/4JGAP9lHgD/kFga/8KXX/+TRwD/jT4A/49CAP+VTQD/n10A/5xYAP+OQQD/lk4A/55cAPL///8A////AP///wD///8A0ppk8tKaZP/SmmT/y4tO/92yiP//////////////////////8NnE/8eCQP+rcTT/ez0A/3IyAP98PgD/gEMA/5FSAP+USwD/jj8A/5lUAP+JNwD/yqV2/694Mf+HNQD/jkAA/82rf/+laBj/jT4A8v///wD///8A////AP///wDSmmTy0ppk/9KaZP/LiUr/4byY///////////////////////gupX/0I5P/+Wuev/Lklz/l1sj/308AP+QSwD/ol0A/59aAP+aVQD/k0oA/8yoh///////+fXv/6pwO//Lp3v///////Pr4f+oay7y////AP///wD///8A////ANKaZPLSmmT/0ppk/8uJSv/hvJj//////////////////////+G7l//Jhkb/0ppk/96nc//fqXX/x4xO/6dkFP+QSQD/llEA/5xXAP+USgD/yaOA///////38uv/qG05/8ijdv//////8efb/6ZpLPL///8A////AP///wD///8A0ppk8tKaZP/SmmT/zIxO/9yxh///////////////////////7dbA/8iEQf/Sm2X/0Zlj/9ScZv/eqHf/2KJv/7yAQf+XTgD/iToA/5lSAP+JNgD/yKFv/611LP+HNQD/jT8A/8qmeP+kZRT/jT4A8v///wD///8A////AP///wDSmmTy0ppk/9KaZP/Pk1n/1J5q//78+//////////////////+/fv/1aFv/8iEQv/Tm2b/0ppl/9GZY//Wn2z/1pZc/9eldf/Bl2b/kUcA/4w9AP+OQAD/lUwA/59eAP+cWQD/jT8A/5ZOAP+eXADy////AP///wD///8A////ANKaZPLSmmT/0ppk/9KZY//KiEn/8d/P///////////////////////47+f/05tm/8iCP//KiEj/yohJ/8eCP//RmGH//vfy///////n1sP/rXQ7/4k4AP+TTAD/nVoA/5xYAP+cVwD/nFgA/5xYAPL///8A////AP///wD///8A0ppk8tKaZP/SmmT/0ptl/8uLTf/aq37////////////////////////////+/fz/6c2y/961jv/etY7/6Myx//78+v//////////////////////3MWv/5xXD/+ORAD/mFQA/51ZAP+cWAD/nFgA8v///wD///8A////AP///wDSmmTy0ppk/9KaZP/SmmT/0ppk/8mFRP/s1b//////////////////////////////////////////////////////////////////////////////+PD/0JFU/7NzMv+WUQD/kUsA/5tXAP+dWQDy////AP///wD///8A////ANKaZP/SmmT/0ppk/9KaZP/Sm2X/z5NZ/8yMT//z5NX/////////////////////////////////////////////////////////////////9Ofa/8yNUP/UmGH/36p5/8yTWv+qaSD/kksA/5ROAPz///8A////AP///wD///8A0ppk5NKaZP/SmmT/0ppk/9KaZP/TnGf/zY9T/82OUv/t1sD//////////////////////////////////////////////////////+7Yw//OkFX/zI5R/9OcZ//SmmP/26V0/9ymdf/BhUf/ol8R6P///wD///8A////AP///wDSmmQ80ppk9tKaZP/SmmT/0ppk/9KaZP/TnGj/zpFW/8qJSv/dson/8uHS//////////////////////////////////Lj0//etIv/y4lL/86QVf/TnGj/0ppk/9KaZP/RmWP/05xn/9ymdfjUnWdC////AP///wD///8A////ANKaZADSmmQc0ppkotKaZP/SmmT/0ppk/9KaZP/Tm2b/0Zli/8qJSf/NjlH/16Z3/+G8mP/myKr/5siq/+G8mP/Xp3f/zY5S/8qISf/RmGH/05tm/9KaZP/SmmT/0ppk/9KaZP/SmmSm0pljINWdaQD///8A////AP///wD///8A0ppkANKaZADSmmQA0ppkQtKaZMrSmmT/0ppk/9KaZP/SmmT/0ptl/9GYYf/Nj1P/y4lL/8qISP/KiEj/y4lK/82PU//RmGH/0ptl/9KaZP/SmmT/0ppk/9KaZP/SmmTO0ppkRtKaZADSmmQA0ppkAP///wD///8A////AP///wDSmmQA0ppkANKaZADSmmQA0ppkANKaZGzSmmTu0ppk/9KaZP/SmmT/0ppk/9KaZP/SmmT/0ppk/9KaZP/SmmT/0ppk/9KaZP/SmmT/0ppk/9KaZP/SmmTw0ppkcNKaZADSmmQA0ppkANKaZADSmmQA////AP///wD///8A////ANKaZADSmmQA0ppkANKaZADSmmQA0ppkANKaZBLSmmSQ0ppk/9KaZP/SmmT/0ppk/9KaZP/SmmT/0ppk/9KaZP/SmmT/0ppk/9KaZP/SmmT/0ppklNKaZBTSmmQA0ppkANKaZADSmmQA0ppkANKaZAD///8A////AP///wD///8A0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQy0ppkutKaZP/SmmT/0ppk/9KaZP/SmmT/0ppk/9KaZP/SmmT/0ppkvtKaZDbSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkAP///wD///8A////AP///wDSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkXNKaZODSmmT/0ppk/9KaZP/SmmT/0ppk5NKaZGDSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQA////AP///wD///8A////ANKaZADSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkBtKaZIbSmmTo0ppk6tKaZIrSmmQK0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkANKaZADSmmQA0ppkANKaZAD///8A////AP/8P///+B///+AH//+AAf//AAD//AAAP/AAAA/gAAAHwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA8AAAAPAAAADwAAAA+AAAAfwAAAP/AAAP/8AAP//gAH//+AH///4H////D//" rel="icon" />
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+  
+</head>
+<body>
+<div class="wrapper">
+<header id="title-block-header">
+<h1 class="title" style="text-align:center">async_scope - Creating scopes for non-sequential concurrency</h1>
+<h3 class="subtitle" style="text-align:center">Draft Proposal</h3>
+
+<table style="border:none;float:right">
+  <tr>
+    <td>Document #:</td>
+    <td>D2519R0</td>
+  </tr>
+  <tr>
+    <td>Date:</td>
+    <td>2022-04-20</td>
+  </tr>
+  <tr>
+    <td style="vertical-align:top">Project:</td>
+    <td>Programming Language C++</td>
+  </tr>
+  <tr>
+    <td style="vertical-align:top">Audience:</td>
+    <td>
+      SG1 Parallelism and Concurrency<br>
+      LEWG Library Evolution<br>
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:top">Reply-to:</td>
+    <td>
+      Kirk Shoop<br>&lt;<a href="mailto:kirk.shoop@gmail.com" class="email">kirk.shoop@gmail.com</a>&gt;<br>
+      Lee Howes<br>&lt;<a href="mailto:lwh@fb.com" class="email">lwh@fb.com</a>&gt;<br>
+    </td>
+  </tr>
+</table>
+
+</header>
+<div style="clear:both">
+<div id="TOC" role="doc-toc">
+<h1 id="toctitle">Contents</h1>
+<ul>
+<li><a href="#changes"><span class="toc-section-number">1</span> Changes<span></span></a>
+<ul>
+<li><a href="#r0"><span class="toc-section-number">1.1</span> R0<span></span></a></li>
+</ul></li>
+<li><a href="#introduction"><span class="toc-section-number">2</span> Introduction<span></span></a></li>
+<li><a href="#motivation"><span class="toc-section-number">3</span> Motivation<span></span></a>
+<ul>
+<li><a href="#motivating-example"><span class="toc-section-number">3.1</span> Motivating example<span></span></a></li>
+<li><a href="#step-forward-towards-structured-concurrency"><span class="toc-section-number">3.2</span> Step forward towards Structured Concurrency<span></span></a></li>
+<li><a href="#p2300-might-be-blocked-by-the-lack-of-async_scope"><span class="toc-section-number">3.3</span> P2300 might be blocked by the lack of <code class="sourceCode default">async_scope</code><span></span></a></li>
+</ul></li>
+<li><a href="#examples-of-use"><span class="toc-section-number">4</span> Examples of use<span></span></a>
+<ul>
+<li><a href="#spawning-work-from-within-a-task"><span class="toc-section-number">4.1</span> Spawning work from within a task<span></span></a></li>
+<li><a href="#starting-parallel-work"><span class="toc-section-number">4.2</span> Starting parallel work<span></span></a></li>
+<li><a href="#calling-on_empty-multiple-times"><span class="toc-section-number">4.3</span> Calling <code class="sourceCode default">on_empty</code> multiple times<span></span></a></li>
+<li><a href="#listener-loop-in-an-http-server"><span class="toc-section-number">4.4</span> Listener loop in an HTTP server<span></span></a></li>
+</ul></li>
+<li><a href="#async-scope-usage-guide"><span class="toc-section-number">5</span> Async Scope, usage guide<span></span></a>
+<ul>
+<li><a href="#definitions"><span class="toc-section-number">5.1</span> Definitions<span></span></a></li>
+<li><a href="#lifetime"><span class="toc-section-number">5.2</span> Lifetime<span></span></a></li>
+<li><a href="#spawn"><span class="toc-section-number">5.3</span> <code class="sourceCode default">spawn</code><span></span></a></li>
+<li><a href="#spawn_future"><span class="toc-section-number">5.4</span> <code class="sourceCode default">spawn_future</code><span></span></a></li>
+<li><a href="#nest"><span class="toc-section-number">5.5</span> <code class="sourceCode default">nest</code><span></span></a></li>
+<li><a href="#empty-detection"><span class="toc-section-number">5.6</span> Empty detection<span></span></a></li>
+<li><a href="#stopping-async_scope"><span class="toc-section-number">5.7</span> Stopping <code class="sourceCode default">async_scope</code><span></span></a></li>
+</ul></li>
+<li><a href="#design-considerations"><span class="toc-section-number">6</span> Design considerations<span></span></a>
+<ul>
+<li><a href="#shape-of-async_scope"><span class="toc-section-number">6.1</span> Shape of <code class="sourceCode default">async_scope</code><span></span></a>
+<ul>
+<li><a href="#concept-vs-type"><span class="toc-section-number">6.1.1</span> Concept vs type<span></span></a></li>
+<li><a href="#one-vs-many"><span class="toc-section-number">6.1.2</span> One vs many<span></span></a></li>
+<li><a href="#customization-point-object-vs-method"><span class="toc-section-number">6.1.3</span> Customization point object vs method<span></span></a></li>
+</ul></li>
+<li><a href="#shape-of-input-senders"><span class="toc-section-number">6.2</span> Shape of input senders<span></span></a>
+<ul>
+<li><a href="#constraints-on-set_value"><span class="toc-section-number">6.2.1</span> Constraints on <code class="sourceCode default">set_value</code><span></span></a></li>
+<li><a href="#handling-errors-in-spawn"><span class="toc-section-number">6.2.2</span> Handling errors in <code class="sourceCode default">spawn</code><span></span></a></li>
+<li><a href="#handling-stop-signals-in-spawn"><span class="toc-section-number">6.2.3</span> Handling stop signals in <code class="sourceCode default">spawn</code><span></span></a></li>
+<li><a href="#no-shape-restrictions-for-the-senders-passed-to-spawn_future-and-nest"><span class="toc-section-number">6.2.4</span> No shape restrictions for the senders passed to <code class="sourceCode default">spawn_future</code> and <code class="sourceCode default">nest</code><span></span></a></li>
+</ul></li>
+<li><a href="#stop-handling"><span class="toc-section-number">6.3</span> Stop handling<span></span></a>
+<ul>
+<li><a href="#alternative-1-request_stop-on-the-async_scope-is-forwarded"><span class="toc-section-number">6.3.1</span> Alternative 1: <code class="sourceCode default">request_stop</code> on the <code class="sourceCode default">async_scope</code> is forwarded<span></span></a></li>
+<li><a href="#alternative-2-request_stop-on-the-async_scope-is-not-forwarded"><span class="toc-section-number">6.3.2</span> Alternative 2: <code class="sourceCode default">request_stop</code> on the <code class="sourceCode default">async_scope</code> is not forwarded<span></span></a></li>
+<li><a href="#inverting-the-forwarding-default"><span class="toc-section-number">6.3.3</span> Inverting the forwarding default<span></span></a></li>
+<li><a href="#result"><span class="toc-section-number">6.3.4</span> Result<span></span></a></li>
+</ul></li>
+<li><a href="#uses-in-other-concurrent-abstractions"><span class="toc-section-number">6.4</span> Uses in other concurrent abstractions<span></span></a></li>
+<li><a href="#removal-of-p2300s-start_detached"><span class="toc-section-number">6.5</span> Removal of P2300’s <code class="sourceCode default">start_detached</code><span></span></a></li>
+<li><a href="#supporting-pipe-operator"><span class="toc-section-number">6.6</span> Supporting pipe operator<span></span></a></li>
+<li><a href="#use-of-customization-point-objects"><span class="toc-section-number">6.7</span> Use of customization point objects<span></span></a></li>
+</ul></li>
+<li><a href="#q-a"><span class="toc-section-number">7</span> Q &amp; A<span></span></a>
+<ul>
+<li><a href="#why-does-async_scope-terminate-in-the-destructor-instead-of-blocking-like-jthread"><span class="toc-section-number">7.1</span> Why does <code class="sourceCode default">async_scope</code> terminate in the destructor instead of blocking like <code class="sourceCode default">jthread</code>?<span></span></a></li>
+<li><a href="#why-doesnt-the-async_scope-destructor-stop-all-the-nested-and-spawned-senders"><span class="toc-section-number">7.2</span> Why doesn’t the <code class="sourceCode default">async_scope</code> destructor stop all the nested and spawned senders?<span></span></a></li>
+</ul></li>
+<li><a href="#naming"><span class="toc-section-number">8</span> Naming<span></span></a>
+<ul>
+<li><a href="#async_scope"><span class="toc-section-number">8.1</span> <code class="sourceCode default">async_scope</code><span></span></a></li>
+<li><a href="#nest-1"><span class="toc-section-number">8.2</span> <code class="sourceCode default">nest</code><span></span></a></li>
+<li><a href="#spawn-1"><span class="toc-section-number">8.3</span> <code class="sourceCode default">spawn</code><span></span></a></li>
+<li><a href="#spawn_future-1"><span class="toc-section-number">8.4</span> <code class="sourceCode default">spawn_future</code><span></span></a></li>
+<li><a href="#on_empty"><span class="toc-section-number">8.5</span> <code class="sourceCode default">on_empty</code><span></span></a></li>
+<li><a href="#table-of-how-some-alternatives-might-be-combined"><span class="toc-section-number">8.6</span> table of how some alternatives might be combined<span></span></a></li>
+</ul></li>
+<li><a href="#specification"><span class="toc-section-number">9</span> Specification<span></span></a>
+<ul>
+<li><a href="#synopsis"><span class="toc-section-number">9.1</span> Synopsis<span></span></a></li>
+<li><a href="#async_scopeasync_scope"><span class="toc-section-number">9.2</span> <code class="sourceCode default">async_scope::~async_scope</code><span></span></a></li>
+<li><a href="#async_scopespawn"><span class="toc-section-number">9.3</span> <code class="sourceCode default">async_scope::spawn</code><span></span></a></li>
+<li><a href="#async_scopespawn_future"><span class="toc-section-number">9.4</span> <code class="sourceCode default">async_scope::spawn_future</code><span></span></a></li>
+<li><a href="#async_scopenest"><span class="toc-section-number">9.5</span> <code class="sourceCode default">async_scope::nest</code><span></span></a></li>
+<li><a href="#async_scopeon_empty"><span class="toc-section-number">9.6</span> <code class="sourceCode default">async_scope::on_empty</code><span></span></a></li>
+<li><a href="#async_scopeget_stop_source"><span class="toc-section-number">9.7</span> <code class="sourceCode default">async_scope::get_stop_source</code><span></span></a></li>
+<li><a href="#async_scopeget_stop_token"><span class="toc-section-number">9.8</span> <code class="sourceCode default">async_scope::get_stop_token</code><span></span></a></li>
+<li><a href="#async_scoperequest_stop"><span class="toc-section-number">9.9</span> <code class="sourceCode default">async_scope::request_stop</code><span></span></a></li>
+</ul></li>
+<li><a href="#bibliography"><span class="toc-section-number">10</span> References<span></span></a></li>
+</ul>
+</div>
+<h1 data-number="1" id="changes"><span class="header-section-number">1</span> Changes<a href="#changes" class="self-link"></a></h1>
+<h2 data-number="1.1" id="r0"><span class="header-section-number">1.1</span> R0<a href="#r0" class="self-link"></a></h2>
+<ul>
+<li>first revision</li>
+</ul>
+<h1 data-number="2" id="introduction"><span class="header-section-number">2</span> Introduction<a href="#introduction" class="self-link"></a></h1>
+<p>A major precept of <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> is structured concurrency. The <code class="sourceCode default">start_detached</code> and <code class="sourceCode default">ensure_started</code> algorithms are motivated by some important scenarios. Not every asynchronous operation has a clear chain of work to consume or block on the result. The problem with these algorithms is that they provide unstructured concurrency. This is an unnecessary and unwelcome and undesirable property for concurrency. It leads to problems with lifetimes, and it requires execution contexts to conflate task lifetime management with execution management.</p>
+<p>This paper describes an object that would be used to create a scope that will contain all senders spawned within its lifetime. These senders can be running on any execution context. The scope object has only one concern, which is to contain the spawned senders to a lifetime that is nested within any other resources that they depend on. In order to be useful within other asynchronous scopes, the object must not have any blocking functions. In practice, this means the scope serves three purposes. It:</p>
+<ul>
+<li>maintains state for launched work so that all in-flight senders have a well-defined location in which to store an <code class="sourceCode default"><em>operation-state</em></code></li>
+<li>manages lifetimes for launched work so that in-flight tasks may be tracked, independent of any particular execution context</li>
+<li>offers a join operation that may be used to continue more work, or block and wait for work, after some set of senders is complete, independent of the context on which they run.</li>
+</ul>
+<p>This object would be used to spawn senders without waiting for each sender to complete.</p>
+<p>The general concept of an async scope to manage work has been deployed broadly in <a href="https://github.com/facebook/folly/blob/main/folly/experimental/coro/AsyncScope.h">folly</a> to safely launch awaitables in folly’s <a href="https://github.com/facebook/folly/tree/main/folly/experimental/coro">coroutine library</a> and in <a href="https://github.com/facebookexperimental/libunifex/blob/main/include/unifex/async_scope.hpp">libunifex</a> where it is designed to be used with the sender/receiver pattern.</p>
+<h1 data-number="3" id="motivation"><span class="header-section-number">3</span> Motivation<a href="#motivation" class="self-link"></a></h1>
+<h2 data-number="3.1" id="motivating-example"><span class="header-section-number">3.1</span> Motivating example<a href="#motivating-example" class="self-link"></a></h2>
+<p>Let us assume the following code:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">namespace</span> ex <span class="op">=</span> std<span class="op">::</span>execution;</span>
+<span id="cb1-2"><a href="#cb1-2"></a></span>
+<span id="cb1-3"><a href="#cb1-3"></a><span class="kw">struct</span> work_context;</span>
+<span id="cb1-4"><a href="#cb1-4"></a><span class="kw">struct</span> work_item;</span>
+<span id="cb1-5"><a href="#cb1-5"></a><span class="dt">void</span> do_work<span class="op">(</span>work_context<span class="op">&amp;</span>, work_item<span class="op">*)</span>;</span>
+<span id="cb1-6"><a href="#cb1-6"></a>std<span class="op">::</span>vector<span class="op">&lt;</span>work_item<span class="op">*&gt;</span> get_work_items<span class="op">()</span>;</span>
+<span id="cb1-7"><a href="#cb1-7"></a></span>
+<span id="cb1-8"><a href="#cb1-8"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9"></a>    static_thread_pool my_pool<span class="op">{</span><span class="dv">8</span><span class="op">}</span>;</span>
+<span id="cb1-10"><a href="#cb1-10"></a>    work_context ctx; <span class="co">// create a global context for the application</span></span>
+<span id="cb1-11"><a href="#cb1-11"></a></span>
+<span id="cb1-12"><a href="#cb1-12"></a>    std<span class="op">::</span>vector<span class="op">&lt;</span>work_item<span class="op">*&gt;</span> items <span class="op">=</span> get_work_items<span class="op">()</span>;</span>
+<span id="cb1-13"><a href="#cb1-13"></a>    <span class="cf">for</span> <span class="op">(</span> <span class="kw">auto</span> item<span class="op">:</span> items <span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14"></a>        <span class="co">// Spawn some work dynamically</span></span>
+<span id="cb1-15"><a href="#cb1-15"></a>        ex<span class="op">::</span>sender <span class="kw">auto</span> snd <span class="op">=</span> ex<span class="op">::</span>transfer_just<span class="op">(</span>my_pool<span class="op">.</span>get_scheduler<span class="op">()</span>, item<span class="op">)</span></span>
+<span id="cb1-16"><a href="#cb1-16"></a>                            <span class="op">|</span> ex<span class="op">::</span>then<span class="op">([&amp;](</span>work_item<span class="op">*</span> item<span class="op">){</span> do_work<span class="op">(</span>ctx, item<span class="op">)</span>; <span class="op">})</span>;</span>
+<span id="cb1-17"><a href="#cb1-17"></a>        ex<span class="op">::</span>start_detached<span class="op">(</span>std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>;</span>
+<span id="cb1-18"><a href="#cb1-18"></a>    <span class="op">}</span></span>
+<span id="cb1-19"><a href="#cb1-19"></a>    <span class="co">// `ctx` and `my_pool` is destroyed</span></span>
+<span id="cb1-20"><a href="#cb1-20"></a><span class="op">}</span></span></code></pre></div>
+<p>In this example we are creating parallel work based on the given input vector. All the work will be spawned in the context of a local <code class="sourceCode default">static_thread_pool</code> object, and will use a shared <code class="sourceCode default">work_context</code> object.</p>
+<p>Because the number of work items is dynamic, one is forced to use <code class="sourceCode default">start_detached()</code> from <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> (or something equivalent) to dynamically spawn work. <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> doesn’t provide any facilities to spawn dynamic work and return a sender (i.e., something like <code class="sourceCode default">when_all</code> but with a dynamic number of input senders).</p>
+<p>Using <code class="sourceCode default">start_detached()</code> here follow the <em>fire-and-forget</em> style, meaning that we have no control over the termination of the work being started. We don’t have control over the lifetime of the operation being started.</p>
+<p>At the end of the function, we are destroying the work context and the thread pool. But at that point, we don’t know whether all the operations have completed. If there are still operations that are not yet complete, this might lead to crashes.</p>
+<p><span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> doesn’t give us out-of-the-box facilities to use in solving these types of problems.</p>
+<p>This paper proposes the <code class="sourceCode default">async_scope</code> facility that would help us avoid the invalid behavior. With it, one might write a safe code this way:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>    static_thread_pool my_pool<span class="op">{</span><span class="dv">8</span><span class="op">}</span>;</span>
+<span id="cb2-3"><a href="#cb2-3"></a>    work_context ctx; <span class="co">// create a global context for the application</span></span>
+<span id="cb2-4"><a href="#cb2-4"></a>    async_scope my_work_scope;                          <span class="co">// NEW!</span></span>
+<span id="cb2-5"><a href="#cb2-5"></a></span>
+<span id="cb2-6"><a href="#cb2-6"></a>    std<span class="op">::</span>vector<span class="op">&lt;</span>work_item<span class="op">*&gt;</span> items <span class="op">=</span> get_work_items<span class="op">()</span>;</span>
+<span id="cb2-7"><a href="#cb2-7"></a>    <span class="cf">for</span> <span class="op">(</span> <span class="kw">auto</span> item<span class="op">:</span> items <span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8"></a>        <span class="co">// Spawn some work dynamically</span></span>
+<span id="cb2-9"><a href="#cb2-9"></a>        ex<span class="op">::</span>sender <span class="kw">auto</span> snd <span class="op">=</span> ex<span class="op">::</span>transfer_just<span class="op">(</span>my_pool<span class="op">.</span>get_scheduler<span class="op">()</span>, item<span class="op">)</span></span>
+<span id="cb2-10"><a href="#cb2-10"></a>                            <span class="op">|</span> ex<span class="op">::</span>then<span class="op">([&amp;](</span>work_item<span class="op">*</span> item<span class="op">){</span> do_work<span class="op">(</span>ctx, item<span class="op">)</span>; <span class="op">})</span>;</span>
+<span id="cb2-11"><a href="#cb2-11"></a>        my_work_scope<span class="op">.</span>spawn<span class="op">(</span>std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>;            <span class="co">// MODIFIED!</span></span>
+<span id="cb2-12"><a href="#cb2-12"></a>    <span class="op">}</span></span>
+<span id="cb2-13"><a href="#cb2-13"></a>    this_thread<span class="op">::</span>sync_wait<span class="op">(</span>my_work_scope<span class="op">.</span>on_empty<span class="op">())</span>;   <span class="co">// NEW!</span></span>
+<span id="cb2-14"><a href="#cb2-14"></a>    <span class="co">// `ctx` and `my_pool` can now safely be destroyed</span></span>
+<span id="cb2-15"><a href="#cb2-15"></a><span class="op">}</span></span></code></pre></div>
+<p>The newly introduced <code class="sourceCode default">async_scope</code> object allows us to control the lifetime of the dynamic work we are spawning. We can wait for all the work that we spawn to be complete before we destruct the objects used by the parallel work.</p>
+<p>Please see below for more examples.</p>
+<h2 data-number="3.2" id="step-forward-towards-structured-concurrency"><span class="header-section-number">3.2</span> Step forward towards Structured Concurrency<a href="#step-forward-towards-structured-concurrency" class="self-link"></a></h2>
+<p>Structured Programming <span class="citation" data-cites="Dahl72">[<a href="#ref-Dahl72" role="doc-biblioref">Dahl72</a>]</span> transformed the software world by making it easier to reason about the code, and build large software from simpler constructs. We want to achieve the same effect on concurrent programming by ensuring that we <em>structure</em> our concurrency code. <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> makes a big step in that direction, but, by itself, it doesn’t fully realize the principles of Structured Programming. More specifically, it doesn’t always ensure that we can apply the <em>single entry, single exit point</em> principle.</p>
+<p>The <code class="sourceCode default">start_detached</code> sender algorithm fails this principle by behaving like a <code class="sourceCode default">GOTO</code> instruction. By calling <code class="sourceCode default">start_detached</code> we essentially continue in two places: in the same function, and on different thread that executes the given work. Moreover, the lifetime of the work started by <code class="sourceCode default">start_detached</code> cannot be bound to the local context. This will prevent local reasoning, thus will make the program harder to understand.</p>
+<p>To properly structure our concurrency, we need an abstraction that ensures that all the work being started has a proper lifetime guarantee. This is the goal of <code class="sourceCode default">async_scope</code>.</p>
+<h2 data-number="3.3" id="p2300-might-be-blocked-by-the-lack-of-async_scope"><span class="header-section-number">3.3</span> P2300 might be blocked by the lack of <code class="sourceCode default">async_scope</code><a href="#p2300-might-be-blocked-by-the-lack-of-async_scope" class="self-link"></a></h2>
+<p>Although <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> is generally considered a strong improvement on concurrency in C++, various people voted against introducing this into the C++ standard. The main reason for this negative vote is the absence of a feature like <code class="sourceCode default">async_scope</code>.</p>
+<p>This paper wants to fix this issue, and ensure that <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> is not being blocked.</p>
+<h1 data-number="4" id="examples-of-use"><span class="header-section-number">4</span> Examples of use<a href="#examples-of-use" class="self-link"></a></h1>
+<h2 data-number="4.1" id="spawning-work-from-within-a-task"><span class="header-section-number">4.1</span> Spawning work from within a task<a href="#spawning-work-from-within-a-task" class="self-link"></a></h2>
+<p>Using a global <code class="sourceCode default">async_scope</code> in combination with a <code class="sourceCode default">system_context</code> from <span class="citation" data-cites="P2079R2">[<a href="#ref-P2079R2" role="doc-biblioref">P2079R2</a>]</span> to spawn work from within a task and join it later:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">using</span> <span class="kw">namespace</span> std<span class="op">::</span>execution;</span>
+<span id="cb3-2"><a href="#cb3-2"></a></span>
+<span id="cb3-3"><a href="#cb3-3"></a>system_context ctx;</span>
+<span id="cb3-4"><a href="#cb3-4"></a><span class="dt">int</span> result <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb3-5"><a href="#cb3-5"></a></span>
+<span id="cb3-6"><a href="#cb3-6"></a><span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7"></a>  async_scope scope;</span>
+<span id="cb3-8"><a href="#cb3-8"></a>  scheduler <span class="kw">auto</span> sch <span class="op">=</span> ctx<span class="op">.</span>scheduler<span class="op">()</span>;</span>
+<span id="cb3-9"><a href="#cb3-9"></a></span>
+<span id="cb3-10"><a href="#cb3-10"></a>  sender <span class="kw">auto</span> val <span class="op">=</span> on<span class="op">(</span></span>
+<span id="cb3-11"><a href="#cb3-11"></a>    sch, just<span class="op">()</span> <span class="op">|</span> then<span class="op">([</span>sch, <span class="op">&amp;</span>scope<span class="op">](</span><span class="kw">auto</span> sched<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-12"><a href="#cb3-12"></a></span>
+<span id="cb3-13"><a href="#cb3-13"></a>        <span class="dt">int</span> val <span class="op">=</span> <span class="dv">13</span>;</span>
+<span id="cb3-14"><a href="#cb3-14"></a></span>
+<span id="cb3-15"><a href="#cb3-15"></a>        <span class="kw">auto</span> print_sender <span class="op">=</span> just<span class="op">()</span> <span class="op">|</span> then<span class="op">([</span>val<span class="op">]{</span></span>
+<span id="cb3-16"><a href="#cb3-16"></a>          std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Hello world! Have an int with value: &quot;</span> <span class="op">&lt;&lt;</span> val <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>;</span>
+<span id="cb3-17"><a href="#cb3-17"></a>        <span class="op">})</span>;</span>
+<span id="cb3-18"><a href="#cb3-18"></a>        <span class="co">// spawn the print sender on sched to make sure it</span></span>
+<span id="cb3-19"><a href="#cb3-19"></a>        <span class="co">// completes before shutdown</span></span>
+<span id="cb3-20"><a href="#cb3-20"></a>        scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, std<span class="op">::</span>move<span class="op">(</span>print_sender<span class="op">)))</span>;</span>
+<span id="cb3-21"><a href="#cb3-21"></a></span>
+<span id="cb3-22"><a href="#cb3-22"></a>        <span class="cf">return</span> val;</span>
+<span id="cb3-23"><a href="#cb3-23"></a>    <span class="op">})</span></span>
+<span id="cb3-24"><a href="#cb3-24"></a>  <span class="op">)</span> <span class="op">|</span> then<span class="op">([&amp;</span>result<span class="op">](</span><span class="kw">auto</span> val<span class="op">){</span>result <span class="op">=</span> val<span class="op">})</span>;</span>
+<span id="cb3-25"><a href="#cb3-25"></a></span>
+<span id="cb3-26"><a href="#cb3-26"></a>  scope<span class="op">.</span>spawn<span class="op">(</span>std<span class="op">::</span>move<span class="op">(</span>val<span class="op">))</span>;</span>
+<span id="cb3-27"><a href="#cb3-27"></a></span>
+<span id="cb3-28"><a href="#cb3-28"></a></span>
+<span id="cb3-29"><a href="#cb3-29"></a>  <span class="co">// Safely wait for all nested work</span></span>
+<span id="cb3-30"><a href="#cb3-30"></a>  this_thread<span class="op">::</span>sync_wait<span class="op">(</span>scope<span class="op">.</span>on_empty<span class="op">())</span>;</span>
+<span id="cb3-31"><a href="#cb3-31"></a><span class="op">}</span>;</span>
+<span id="cb3-32"><a href="#cb3-32"></a></span>
+<span id="cb3-33"><a href="#cb3-33"></a><span class="co">// The scope ensured that all work is safely joined, so result contains 13</span></span>
+<span id="cb3-34"><a href="#cb3-34"></a>std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Result: &quot;</span> <span class="op">&lt;&lt;</span> result <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>;</span>
+<span id="cb3-35"><a href="#cb3-35"></a></span>
+<span id="cb3-36"><a href="#cb3-36"></a><span class="co">// and destruction of the context is now safe</span></span></code></pre></div>
+<h2 data-number="4.2" id="starting-parallel-work"><span class="header-section-number">4.2</span> Starting parallel work<a href="#starting-parallel-work" class="self-link"></a></h2>
+<p>In this example we use the <code class="sourceCode default">async_scope</code> within lexical scope to construct an algorithm that performs parallel work. This uses the <a href="https://github.com/facebookexperimental/libunifex/blob/main/doc/api_reference.md#let_value_withinvocable-state_factory-invocable-func---sender"><code class="sourceCode default">let_value_with</code></a> algorithm implemented in <a href="https://github.com/facebookexperimental/libunifex/">libunifex</a> which simplifies in-place construction of a non-moveable object in the <code class="sourceCode default">let_value_with</code> algorithms operation state. Here foo launches 100 tasks that concurrently run on some scheduler provided to <code class="sourceCode default">foo</code> through its connected receiver, and then asynchronously joined. In this case the context the work is run on will be the <code class="sourceCode default">system_context</code>’s scheduler, from <span class="citation" data-cites="P2079R2">[<a href="#ref-P2079R2" role="doc-biblioref">P2079R2</a>]</span>. This structure emulates how we might build a parallel algorithm where each <code class="sourceCode default">some_work</code> might be operating on a fragment of data.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">using</span> <span class="kw">namespace</span> std<span class="op">::</span>execution;</span>
+<span id="cb4-2"><a href="#cb4-2"></a></span>
+<span id="cb4-3"><a href="#cb4-3"></a>sender <span class="kw">auto</span> some_work<span class="op">(</span><span class="dt">int</span> work_index<span class="op">)</span>;</span>
+<span id="cb4-4"><a href="#cb4-4"></a></span>
+<span id="cb4-5"><a href="#cb4-5"></a>sender <span class="kw">auto</span> foo<span class="op">(</span>scheduler <span class="kw">auto</span> sch<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6"></a>  <span class="cf">return</span> schedule<span class="op">(</span>sch<span class="op">)</span></span>
+<span id="cb4-7"><a href="#cb4-7"></a>       <span class="op">|</span> then<span class="op">([]{</span> std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Before tasks launch</span><span class="sc">\n</span><span class="st">&quot;</span>; <span class="op">})</span></span>
+<span id="cb4-8"><a href="#cb4-8"></a>       <span class="op">|</span> let_value_with<span class="op">(</span></span>
+<span id="cb4-9"><a href="#cb4-9"></a>           <span class="op">[]{</span> <span class="cf">return</span> async_scope<span class="op">{}</span>; <span class="op">}</span>,</span>
+<span id="cb4-10"><a href="#cb4-10"></a>           <span class="op">[&amp;</span>sch<span class="op">](</span>async_scope<span class="op">&amp;</span> scope<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-11"><a href="#cb4-11"></a>             <span class="co">// Create parallel work</span></span>
+<span id="cb4-12"><a href="#cb4-12"></a>             <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> <span class="dv">100</span>; <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb4-13"><a href="#cb4-13"></a>               scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb4-14"><a href="#cb4-14"></a>             <span class="co">// Join the work with the help of the scope</span></span>
+<span id="cb4-15"><a href="#cb4-15"></a>             <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb4-16"><a href="#cb4-16"></a>           <span class="op">}</span></span>
+<span id="cb4-17"><a href="#cb4-17"></a>       <span class="op">)</span></span>
+<span id="cb4-18"><a href="#cb4-18"></a>       <span class="op">|</span> then<span class="op">([]{</span> std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;After tasks complete</span><span class="sc">\n</span><span class="st">&quot;</span>; <span class="op">})</span></span>
+<span id="cb4-19"><a href="#cb4-19"></a>       ;</span>
+<span id="cb4-20"><a href="#cb4-20"></a><span class="op">}</span></span></code></pre></div>
+<h2 data-number="4.3" id="calling-on_empty-multiple-times"><span class="header-section-number">4.3</span> Calling <code class="sourceCode default">on_empty</code> multiple times<a href="#calling-on_empty-multiple-times" class="self-link"></a></h2>
+<p>In this example we showcase how <code class="sourceCode default">async_scope</code> objects can be used as gateways between different operations multiple times. We have a tabular data that needs to be processed in a clear sequence. First we need to preprocess the whole data. Then, we need to process the data by rows (each row can be processed in parallel). Then, we need to process the data by columns (each column can be processed in parallel). Finally, we postprocess the tabular data.</p>
+<p>As we are creating dynamic work for processing the rows and processing the columns, we are putting the spawned work in an <code class="sourceCode default">async_scope</code> object. As we need to process all the rows before processing columns, we will call <code class="sourceCode default">on_empty()</code> on our <code class="sourceCode default">async_scope</code> object to get notified when all the rows processing complete. Similarly, to wait for the processing of the columns to complete, we can use <code class="sourceCode default">on_empty()</code> again.</p>
+<p>It is ok if <code class="sourceCode default">on_empty()</code> is called multiple times on the same <code class="sourceCode default">async_scope</code> object. ource objects.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">struct</span> tabular_data;</span>
+<span id="cb5-2"><a href="#cb5-2"></a>sender <span class="kw">auto</span> preprocess<span class="op">(</span>tabular_data<span class="op">&amp;)</span>;</span>
+<span id="cb5-3"><a href="#cb5-3"></a>sender <span class="kw">auto</span> postprocess<span class="op">(</span>tabular_data<span class="op">&amp;)</span>;</span>
+<span id="cb5-4"><a href="#cb5-4"></a>sender <span class="kw">auto</span> process_row<span class="op">(</span>tabular_data<span class="op">&amp;</span>, <span class="dt">int</span> row<span class="op">)</span>;</span>
+<span id="cb5-5"><a href="#cb5-5"></a>sender <span class="kw">auto</span> process_col<span class="op">(</span>tabular_data<span class="op">&amp;</span>, <span class="dt">int</span> col<span class="op">)</span>;</span>
+<span id="cb5-6"><a href="#cb5-6"></a></span>
+<span id="cb5-7"><a href="#cb5-7"></a>sender <span class="kw">auto</span> process<span class="op">(</span>scheduler <span class="kw">auto</span> sch, tabular_data<span class="op">&amp;</span> data<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-8"><a href="#cb5-8"></a>  async_scope<span class="op">&amp;</span> scope <span class="op">=</span> <span class="op">*(</span><span class="kw">new</span> async_scope<span class="op">{})</span>;</span>
+<span id="cb5-9"><a href="#cb5-9"></a>  <span class="cf">return</span> schedule<span class="op">(</span>sch<span class="op">)</span></span>
+<span id="cb5-10"><a href="#cb5-10"></a>       <span class="op">|</span> let_value_with<span class="op">(</span></span>
+<span id="cb5-11"><a href="#cb5-11"></a>           <span class="op">[]{</span> <span class="cf">return</span> async_scope<span class="op">{}</span>; <span class="op">}</span>,</span>
+<span id="cb5-12"><a href="#cb5-12"></a>           <span class="op">[&amp;](</span>async_scope<span class="op">&amp;</span> scope<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-13"><a href="#cb5-13"></a>             <span class="cf">return</span> just<span class="op">()</span></span>
+<span id="cb5-14"><a href="#cb5-14"></a>                  <span class="co">// first phase: preprocess the tabular data</span></span>
+<span id="cb5-15"><a href="#cb5-15"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span> <span class="cf">return</span> preprocess<span class="op">(</span>data<span class="op">)</span>; <span class="op">})</span></span>
+<span id="cb5-16"><a href="#cb5-16"></a>                  <span class="co">// second phase: process the data by rows, in parallel</span></span>
+<span id="cb5-17"><a href="#cb5-17"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
+<span id="cb5-18"><a href="#cb5-18"></a>                      <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> data<span class="op">.</span>num_rows<span class="op">()</span>; <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb5-19"><a href="#cb5-19"></a>                        scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, process_row<span class="op">(</span>data, i<span class="op">)))</span>;</span>
+<span id="cb5-20"><a href="#cb5-20"></a>                      <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb5-21"><a href="#cb5-21"></a>                  <span class="op">})</span></span>
+<span id="cb5-22"><a href="#cb5-22"></a>                  <span class="co">// third phase: process the data by columns, in parallel</span></span>
+<span id="cb5-23"><a href="#cb5-23"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
+<span id="cb5-24"><a href="#cb5-24"></a>                      <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> data<span class="op">.</span>num_cols<span class="op">()</span>; <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb5-25"><a href="#cb5-25"></a>                        scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, process_col<span class="op">(</span>data, i<span class="op">)))</span>;</span>
+<span id="cb5-26"><a href="#cb5-26"></a>                      <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb5-27"><a href="#cb5-27"></a>                  <span class="op">})</span></span>
+<span id="cb5-28"><a href="#cb5-28"></a>                  <span class="co">// fourth phase: postprocess the data</span></span>
+<span id="cb5-29"><a href="#cb5-29"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span> <span class="cf">return</span> postprocess<span class="op">(</span>data<span class="op">)</span>; <span class="op">})</span></span>
+<span id="cb5-30"><a href="#cb5-30"></a>                  ;</span>
+<span id="cb5-31"><a href="#cb5-31"></a>           <span class="op">}</span></span>
+<span id="cb5-32"><a href="#cb5-32"></a>       <span class="op">)</span></span>
+<span id="cb5-33"><a href="#cb5-33"></a>       ;</span>
+<span id="cb5-34"><a href="#cb5-34"></a><span class="op">}</span></span></code></pre></div>
+<h2 data-number="4.4" id="listener-loop-in-an-http-server"><span class="header-section-number">4.4</span> Listener loop in an HTTP server<a href="#listener-loop-in-an-http-server" class="self-link"></a></h2>
+<p>This example shows how one can write the listener loop in an HTTP server, with the help of coroutines. The HTTP server will continuously accept new connection and start work to handle the requests coming on the new connections. While the listening activity is bound in the scope of the loop, the lifetime of handling requests may exceed the scope of the loop. We use <code class="sourceCode default">async_scope</code> to limit the lifetime of handling the requests.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1"></a>task<span class="op">&lt;</span><span class="dt">size_t</span><span class="op">&gt;</span> listener<span class="op">(</span><span class="dt">int</span> port, io_context<span class="op">&amp;</span> ctx, static_thread_pool<span class="op">&amp;</span> pool<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a>    listening_socket listen_sock<span class="op">{</span>port<span class="op">}</span>;</span>
+<span id="cb6-3"><a href="#cb6-3"></a>    async_scope work_scope;</span>
+<span id="cb6-4"><a href="#cb6-4"></a>    <span class="dt">size_t</span> count<span class="op">{</span><span class="dv">0</span><span class="op">}</span>;</span>
+<span id="cb6-5"><a href="#cb6-5"></a>    <span class="cf">while</span> <span class="op">(!</span>ctx<span class="op">.</span>is_stopped<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb6-6"><a href="#cb6-6"></a>        <span class="co">// Accept a new connection</span></span>
+<span id="cb6-7"><a href="#cb6-7"></a>        connection conn <span class="op">=</span> <span class="kw">co_await</span> async_accept<span class="op">(</span>ctx, listen_sock<span class="op">)</span>;</span>
+<span id="cb6-8"><a href="#cb6-8"></a>        count<span class="op">++</span>;</span>
+<span id="cb6-9"><a href="#cb6-9"></a></span>
+<span id="cb6-10"><a href="#cb6-10"></a>        <span class="co">// Create work to handle the connection in the scope of `work_scope`</span></span>
+<span id="cb6-11"><a href="#cb6-11"></a>        conn_data data<span class="op">{</span>std<span class="op">::</span>move<span class="op">(</span>conn<span class="op">)</span>, ctx, pool<span class="op">}</span>;</span>
+<span id="cb6-12"><a href="#cb6-12"></a>        sender <span class="kw">auto</span> snd</span>
+<span id="cb6-13"><a href="#cb6-13"></a>            <span class="op">=</span> just<span class="op">()</span> </span>
+<span id="cb6-14"><a href="#cb6-14"></a>            <span class="op">|</span> let_value<span class="op">([</span>data <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>data<span class="op">)]()</span> <span class="op">{</span></span>
+<span id="cb6-15"><a href="#cb6-15"></a>                  <span class="cf">return</span> handle_connection<span class="op">(</span>data<span class="op">)</span>;</span>
+<span id="cb6-16"><a href="#cb6-16"></a>              <span class="op">})</span></span>
+<span id="cb6-17"><a href="#cb6-17"></a>            ;</span>
+<span id="cb6-18"><a href="#cb6-18"></a>        work_scope<span class="op">.</span>spawn<span class="op">(</span>std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>;</span>
+<span id="cb6-19"><a href="#cb6-19"></a>    <span class="op">}</span></span>
+<span id="cb6-20"><a href="#cb6-20"></a>    <span class="co">// Continue only after all requests are handled</span></span>
+<span id="cb6-21"><a href="#cb6-21"></a>    <span class="kw">co_await</span> work_scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb6-22"><a href="#cb6-22"></a>    <span class="co">// At this point, all the request handling is complete </span></span>
+<span id="cb6-23"><a href="#cb6-23"></a>    <span class="kw">co_return</span> count;</span>
+<span id="cb6-24"><a href="#cb6-24"></a><span class="op">}</span></span></code></pre></div>
+<h1 data-number="5" id="async-scope-usage-guide"><span class="header-section-number">5</span> Async Scope, usage guide<a href="#async-scope-usage-guide" class="self-link"></a></h1>
+<p>The requirements for the async scope are:</p>
+<ul>
+<li>An <code class="sourceCode default">async_scope</code> must be non-movable and non-copyable.</li>
+<li>An <code class="sourceCode default">async_scope</code> must be <em>empty</em> when the destructor runs.</li>
+<li>An <code class="sourceCode default">async_scope</code> must introduce a cancellation scope.</li>
+<li>An <code class="sourceCode default">async_scope</code> must not provide any query CPO’s on the receiver passed to the sender, other than <code class="sourceCode default">get_stop_token()</code> (in order to forward cancellation of the async_scope <code class="sourceCode default">stop_source</code> to all nested and spawned senders).</li>
+<li>An <code class="sourceCode default">async_scope</code> must allow an arbitrary sender to be nested within the scope without eagerly starting the sender (<code class="sourceCode default">nest()</code>).</li>
+<li>An <code class="sourceCode default">async_scope</code> must constrain <code class="sourceCode default">spawn()</code> to accept only senders that complete with <code class="sourceCode default">void</code>.</li>
+<li>An <code class="sourceCode default">async_scope</code> must provide an <code class="sourceCode default"><em>on-empty-sender</em></code> that completes when all spawned senders are complete.</li>
+<li>An <code class="sourceCode default">async_scope</code> must constrain <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> must start the given sender before they exit.</li>
+</ul>
+<p>More on these items can be found below in the sections below.</p>
+<h2 data-number="5.1" id="definitions"><span class="header-section-number">5.1</span> Definitions<a href="#definitions" class="self-link"></a></h2>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1"></a><span class="kw">struct</span> async_scope <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2"></a>    <span class="op">~</span>async_scope<span class="op">()</span>;</span>
+<span id="cb7-3"><a href="#cb7-3"></a>    async_scope<span class="op">(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb7-4"><a href="#cb7-4"></a>    async_scope<span class="op">(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb7-5"><a href="#cb7-5"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb7-6"><a href="#cb7-6"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb7-7"><a href="#cb7-7"></a></span>
+<span id="cb7-8"><a href="#cb7-8"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span></span>
+<span id="cb7-9"><a href="#cb7-9"></a>    <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb7-10"><a href="#cb7-10"></a></span>
+<span id="cb7-11"><a href="#cb7-11"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb7-12"><a href="#cb7-12"></a>    <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb7-13"><a href="#cb7-13"></a></span>
+<span id="cb7-14"><a href="#cb7-14"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb7-15"><a href="#cb7-15"></a>    <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb7-16"><a href="#cb7-16"></a></span>
+<span id="cb7-17"><a href="#cb7-17"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
+<span id="cb7-18"><a href="#cb7-18"></a>    <em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb7-19"><a href="#cb7-19"></a>    </span>
+<span id="cb7-20"><a href="#cb7-20"></a>    in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb7-21"><a href="#cb7-21"></a>    in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb7-22"><a href="#cb7-22"></a>    <span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb7-23"><a href="#cb7-23"></a><span class="op">}</span>;</span></code></pre></div>
+<h2 data-number="5.2" id="lifetime"><span class="header-section-number">5.2</span> Lifetime<a href="#lifetime" class="self-link"></a></h2>
+<p>An <code class="sourceCode default">async_scope</code> object must outlive work that is spawned on it. It should be viewed as owning the storage for that work. The <code class="sourceCode default">async_scope</code> may be constructed in a local context, matching the syntactic scope or the lifetime of surrounding algorithms. The destructor of an <code class="sourceCode default">async_scope</code> will <code class="sourceCode default">terminate()</code> if there is outstanding work in the scope at destruction time. One way to ensure that there is no work in scope is to start the sender returned by <code class="sourceCode default">on_empty</code> and wait for its completion; and ensure that no work is being added to the scope in the meantime.</p>
+<p>Please see <a href="#q-a">Q &amp; A</a> section for more details on reasons why calling <code class="sourceCode default">terminate()</code> is preferred to implicit waiting.</p>
+<h2 data-number="5.3" id="spawn"><span class="header-section-number">5.3</span> <code class="sourceCode default">spawn</code><a href="#spawn" class="self-link"></a></h2>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
+<p>Eagerly launches work on the <code class="sourceCode default">async_scope</code>. This involves an allocation for the <code class="sourceCode default"><em>operation-state</em></code> of the sender until it completes.</p>
+<p>This is similar to <code class="sourceCode default">start_detached()</code> from <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>, but we keep track of the lifetime of the given work.</p>
+<p>The given sender must complete with <code class="sourceCode default">void</code> or be stopped. It is not accepted a sender that can complete with errors; the user must explicitly handle the errors that might appear before passing the corresponding sender to <code class="sourceCode default">spawn</code>.</p>
+<p>As <code class="sourceCode default">spawn()</code> starts the work synchronously, it is important that the user provides a non-blocking senders. The reason is that <code class="sourceCode default">spawn()</code> needs extra resources, and it’s less efficient than just executing the work inline. Using <code class="sourceCode default">spawn()</code> with a sender generated by <code class="sourceCode default">on(sched, <em>blocking-sender</em>)</code> is a very useful pattern in this context.</p>
+<p>Usage example:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
+<span id="cb9-2"><a href="#cb9-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
+<span id="cb9-3"><a href="#cb9-3"></a>async_scope s;</span>
+<span id="cb9-4"><a href="#cb9-4"></a><span class="op">...</span></span>
+<span id="cb9-5"><a href="#cb9-5"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">100</span>; i<span class="op">++)</span></span>
+<span id="cb9-6"><a href="#cb9-6"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb9-7"><a href="#cb9-7"></a><span class="cf">return</span> s<span class="op">.</span>on_empty<span class="op">()</span>; <span class="co">// completes when all work is done</span></span></code></pre></div>
+<h2 data-number="5.4" id="spawn_future"><span class="header-section-number">5.4</span> <code class="sourceCode default">spawn_future</code><a href="#spawn_future" class="self-link"></a></h2>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
+<p>Eagerly launches work on the <code class="sourceCode default">async_scope</code> but returns a <code class="sourceCode default"><em>spawn-future-sender</em></code> that represents an eagerly running task. This involves an allocation for the <code class="sourceCode default"><em>operation-state</em></code> of the sender, until it completes, and synchronization to resolve the race between the production of the result and the consumption of the result.</p>
+<p>This is similar to <code class="sourceCode default">ensure_started()</code> from <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>.</p>
+<p>Unlike <code class="sourceCode default">spawn()</code>, the input sender passed to <code class="sourceCode default">spawn_future()</code> is not constrained on a given shape. It may send different types of values, and it can complete with errors.</p>
+<p>It is safe to drop the sender returned from <code class="sourceCode default">spawn_future()</code> without starting it because the <code class="sourceCode default">async_scope</code> safely manages the lifetime of the running work.</p>
+<p>Please note that there is a race between the completion of the given sender and the start of the returned sender. The race will be resolved by the <code class="sourceCode default"><em>spawn-future-sender</em>&lt;&gt;</code> state.</p>
+<p>Cancelling the returned sender, cancels <code class="sourceCode default">s</code> but does not cancel the <code class="sourceCode default">async_scope</code>.</p>
+<p>Usage example:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
+<span id="cb11-3"><a href="#cb11-3"></a>async_scope s;</span>
+<span id="cb11-4"><a href="#cb11-4"></a><span class="op">...</span></span>
+<span id="cb11-5"><a href="#cb11-5"></a>sender <span class="kw">auto</span> snd <span class="op">=</span> s<span class="op">.</span>spawn_future<span class="op">(</span>on<span class="op">(</span>sched, key_work<span class="op">()))</span></span>
+<span id="cb11-6"><a href="#cb11-6"></a>                <span class="op">|</span> then<span class="op">(</span>continue_fun<span class="op">)</span>;</span>
+<span id="cb11-7"><a href="#cb11-7"></a><span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">10</span>; i<span class="op">++)</span></span>
+<span id="cb11-8"><a href="#cb11-8"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, other_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb11-9"><a href="#cb11-9"></a><span class="cf">return</span> when_all<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">()</span>, std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>;</span></code></pre></div>
+<h2 data-number="5.5" id="nest"><span class="header-section-number">5.5</span> <code class="sourceCode default">nest</code><a href="#nest" class="self-link"></a></h2>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
+<p>Returns a <code class="sourceCode default"><em>nest-sender</em></code> that extends the lifetime of the <code class="sourceCode default">async_scope</code> that produced it to include the lifetime of the <code class="sourceCode default"><em>nest-sender</em></code> object and, if started, the lifetime of the given sender operation.</p>
+<p>A call to <code class="sourceCode default">nest()</code> does not start the given sender. A call to <code class="sourceCode default">nest()</code> is not expected to incur allocations.</p>
+<p>Connecting and starting the sender returned from <code class="sourceCode default">nest()</code> will connect and start the input sender.</p>
+<p>Similar to <code class="sourceCode default">spawn_future()</code>, <code class="sourceCode default">nest()</code> doesn’t constrain the input sender to any specific shape. Any type of sender is accepted.</p>
+<p>The returned sender prevents the scope from ending. It is safe to drop it without starting it and this will remove it from the <code class="sourceCode default">async_scope</code> lifetime.</p>
+<p>As <code class="sourceCode default">nest()</code> does not immediately start the given work, it is ok to pass in blocking senders.</p>
+<p>Cancelling the returned sender, once it is connected and started, cancels <code class="sourceCode default">s</code> but does not cancel the <code class="sourceCode default">async_scope</code>.</p>
+<p>Usage example:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
+<span id="cb13-2"><a href="#cb13-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
+<span id="cb13-3"><a href="#cb13-3"></a>async_scope s;</span>
+<span id="cb13-4"><a href="#cb13-4"></a><span class="op">...</span></span>
+<span id="cb13-5"><a href="#cb13-5"></a>sender <span class="kw">auto</span> snd <span class="op">=</span> s<span class="op">.</span>nest<span class="op">(</span>key_work<span class="op">())</span>;</span>
+<span id="cb13-6"><a href="#cb13-6"></a><span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">10</span>; i<span class="op">++)</span></span>
+<span id="cb13-7"><a href="#cb13-7"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, other_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb13-8"><a href="#cb13-8"></a><span class="co">// will deadlock: this_thread::sync_wait(s.on_empty());</span></span>
+<span id="cb13-9"><a href="#cb13-9"></a><span class="cf">return</span> when_all<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">()</span>, std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>; <span class="co">// OK, completing snd will also complete s.on_empty()</span></span></code></pre></div>
+<h2 data-number="5.6" id="empty-detection"><span class="header-section-number">5.6</span> Empty detection<a href="#empty-detection" class="self-link"></a></h2>
+<div class="sourceCode" id="cb14"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1"></a><em>on-empty-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span></code></pre></div>
+<p>An <code class="sourceCode default">async_scope</code> object is considered to be <em>non-empty</em> when there are spawned senders that haven’t completed yet, or there are senders created with <code class="sourceCode default">async_scope</code> that are in flight.<br />
+The object is considered <em>empty</em> otherwise. An <code class="sourceCode default">async_scope</code> can be <em>empty</em> more than once.</p>
+<p><code class="sourceCode default"><em>on-empty-sender</em></code> completes with <code class="sourceCode default">void</code> when all the <code class="sourceCode default">async_scope</code> object becomes <em>empty</em>. The intended usage is to spawn all the senders and then start the <code class="sourceCode default"><em>on-empty-sender</em></code> to know when all spawned senders have completed.</p>
+<p>To safely destroy the <code class="sourceCode default">async_scope</code> object it’s recommended to use <code class="sourceCode default"><em>on-empty-sender</em></code> to get notified when the scope object finished executing all the work. In this case, the <code class="sourceCode default"><em>on-empty-sender</em></code> start must happen-after all calls to (non-cancelled) <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> are complete.</p>
+<p>That is to say the following is safe:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1"></a><span class="op">{</span></span>
+<span id="cb15-2"><a href="#cb15-2"></a>  async_scope s;</span>
+<span id="cb15-3"><a href="#cb15-3"></a>  s<span class="op">.</span>spawn<span class="op">(</span>snd<span class="op">)</span>;</span>
+<span id="cb15-4"><a href="#cb15-4"></a>  sync_wait<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">())</span>;</span>
+<span id="cb15-5"><a href="#cb15-5"></a><span class="op">}</span></span></code></pre></div>
+<p>Usage example:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1"></a>sender <span class="kw">auto</span> run_in_parallel<span class="op">(</span><span class="dt">int</span> num_jobs, async_scope<span class="op">&amp;</span> scope, scheduler <span class="kw">auto</span><span class="op">&amp;</span> sched<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2"></a>  <span class="co">// Create parallel work</span></span>
+<span id="cb16-3"><a href="#cb16-3"></a>  <span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span>num_jobs; i<span class="op">++</span> <span class="op">)</span></span>
+<span id="cb16-4"><a href="#cb16-4"></a>    scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb16-5"><a href="#cb16-5"></a>  <span class="co">// Join the work with the help of the scope</span></span>
+<span id="cb16-6"><a href="#cb16-6"></a>  <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb16-7"><a href="#cb16-7"></a><span class="op">}</span></span></code></pre></div>
+<h2 data-number="5.7" id="stopping-async_scope"><span class="header-section-number">5.7</span> Stopping <code class="sourceCode default">async_scope</code><a href="#stopping-async_scope" class="self-link"></a></h2>
+<div class="sourceCode" id="cb17"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1"></a>in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span></code></pre></div>
+<p>Returns a <code class="sourceCode default">in_place_stop_source</code> associated with the <code class="sourceCode default">async_scope</code>’s <code class="sourceCode default">stop_token</code>. This <code class="sourceCode default">in_place_stop_source</code> will trigger the <code class="sourceCode default">in_place_stop_token</code>, and will cause future calls to <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> to start with a <code class="sourceCode default">in_place_stop_token</code> that is already in the <code class="sourceCode default">stop_requested()</code> state.</p>
+<p>Calling <code class="sourceCode default">request_stop</code> on the returned <code class="sourceCode default">stop_source</code> will forward that request to all the nested and spawned senders.</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1"></a>in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span></code></pre></div>
+<p>Equivalent to calling <code class="sourceCode default">get_stop_source().get_token()</code>.</p>
+<p>Returns the <code class="sourceCode default">in_place_stop_token</code> associated with the <code class="sourceCode default">async_scope</code>. This will report stopped when the <code class="sourceCode default">stop_source</code> is stopped or <code class="sourceCode default">request_stop()</code> is called. The <code class="sourceCode default">in_place_stop_token</code> is provided to all nested and spawned senders to respond to a stop request.</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1"></a><span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span></code></pre></div>
+<p>Equivalent to calling <code class="sourceCode default">get_stop_source().request_stop()</code>.</p>
+<p>Usage example:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb20-2"><a href="#cb20-2"></a>    async_scope scope;</span>
+<span id="cb20-3"><a href="#cb20-3"></a>    sender <span class="kw">auto</span> program <span class="op">=</span> program_work<span class="op">(</span>scope<span class="op">)</span>;</span>
+<span id="cb20-4"><a href="#cb20-4"></a>    sender <span class="kw">auto</span> program_with_termination</span>
+<span id="cb20-5"><a href="#cb20-5"></a>        <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>program<span class="op">)</span></span>
+<span id="cb20-6"><a href="#cb20-6"></a>        <span class="co">// Ensure we don&#39;t run any dynamic tasks before exiting</span></span>
+<span id="cb20-7"><a href="#cb20-7"></a>        <span class="co">// and wait for ongoing work to complete</span></span>
+<span id="cb20-8"><a href="#cb20-8"></a>        <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
+<span id="cb20-9"><a href="#cb20-9"></a>            scope<span class="op">.</span>request_stop<span class="op">()</span>;</span>
+<span id="cb20-10"><a href="#cb20-10"></a>            <span class="cf">return</span> scope<span class="op">.</span>one_empty<span class="op">()</span>;</span>
+<span id="cb20-11"><a href="#cb20-11"></a>        <span class="op">})</span></span>
+<span id="cb20-12"><a href="#cb20-12"></a>        ;</span>
+<span id="cb20-13"><a href="#cb20-13"></a>    this_thread<span class="op">::</span>sync_wait<span class="op">(</span>program_with_termination<span class="op">)</span>;</span>
+<span id="cb20-14"><a href="#cb20-14"></a>    <span class="co">// all work, static or dynamic is completed at this point</span></span>
+<span id="cb20-15"><a href="#cb20-15"></a>    <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb20-16"><a href="#cb20-16"></a><span class="op">}</span></span></code></pre></div>
+<h1 data-number="6" id="design-considerations"><span class="header-section-number">6</span> Design considerations<a href="#design-considerations" class="self-link"></a></h1>
+<h2 data-number="6.1" id="shape-of-async_scope"><span class="header-section-number">6.1</span> Shape of <code class="sourceCode default">async_scope</code><a href="#shape-of-async_scope" class="self-link"></a></h2>
+<h3 data-number="6.1.1" id="concept-vs-type"><span class="header-section-number">6.1.1</span> Concept vs type<a href="#concept-vs-type" class="self-link"></a></h3>
+<p>One option is to have a <code class="sourceCode default">async_scope</code> concept that has many implementations.</p>
+<p>Another option is to have a type that has one implementation per library vender.</p>
+<blockquote>
+<p><strong>Chosen:</strong> Due to time constraints, this paper proposes a type.</p>
+</blockquote>
+<h3 data-number="6.1.2" id="one-vs-many"><span class="header-section-number">6.1.2</span> One vs many<a href="#one-vs-many" class="self-link"></a></h3>
+<p>One option would be for <code class="sourceCode default">async_scope</code> to have:</p>
+<ul>
+<li><code class="sourceCode default">template &lt;sender S&gt;<em>nest-sender</em>&lt;S&gt; nest(S&amp;&amp;)</code></li>
+</ul>
+<p>and not</p>
+<ul>
+<li><code class="sourceCode default">template &lt;sender S&gt; void spawn(S&amp;&amp;)</code></li>
+<li><code class="sourceCode default">template &lt;sender S&gt; <em>spawn-future-sender</em>&lt;S&gt; spawn_future(S&amp;&amp;)</code></li>
+</ul>
+<p>This would remove questions of when and how the state is allocated and the operation started from the scope.</p>
+<p>The single concern of the <code class="sourceCode default">async_scope</code> that only had <code class="sourceCode default">nest()</code> would be to combine the lifetimes of many senders within one async scope.</p>
+<p><code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> would still exist, in some form, and would use an <code class="sourceCode default">async_scope</code> parameter or member or base class to place the sender within an <code class="sourceCode default">async_scope</code>.</p>
+<p>Another option is to add <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> methods to <code class="sourceCode default">async_scope</code>.</p>
+<blockquote>
+<p><strong>Chosen:</strong> Due to time constraints, this paper proposes to add methods for <code class="sourceCode default">spawn</code> and <code class="sourceCode default">spawn_future</code> in addition to <code class="sourceCode default">nest</code>.</p>
+</blockquote>
+<h3 data-number="6.1.3" id="customization-point-object-vs-method"><span class="header-section-number">6.1.3</span> Customization point object vs method<a href="#customization-point-object-vs-method" class="self-link"></a></h3>
+<p>One option is to define Customization Point Objects for <code class="sourceCode default">nest</code>, <code class="sourceCode default">spawn</code>, <code class="sourceCode default">spawn_future</code> and <code class="sourceCode default">on_empty</code> that operate on anything that customizes those objects.</p>
+<p>Another option is to define a type with <code class="sourceCode default">nest</code>, <code class="sourceCode default">spawn</code>, <code class="sourceCode default">spawn_future</code> and <code class="sourceCode default">on_empty</code> methods.</p>
+<blockquote>
+<p><strong>Chosen:</strong> methods on a type.</p>
+</blockquote>
+<h2 data-number="6.2" id="shape-of-input-senders"><span class="header-section-number">6.2</span> Shape of input senders<a href="#shape-of-input-senders" class="self-link"></a></h2>
+<h3 data-number="6.2.1" id="constraints-on-set_value"><span class="header-section-number">6.2.1</span> Constraints on <code class="sourceCode default">set_value</code><a href="#constraints-on-set_value" class="self-link"></a></h3>
+<p>It makes sense for <code class="sourceCode default">spawn_future()</code> to accept senders with any type of completion signatures. The caller gets back a sender that can be used to be chained with other senders, and it doesn’t make sense to restrict the shape of this sender.</p>
+<p>The same reasoning doesn’t necessarily follow for <code class="sourceCode default">spawn()</code> as the result of the spawned work is dropped. There are two main alternatives:</p>
+<ul>
+<li>do not constrain the shape of the input sender (i.e., dropping the results of the computation)</li>
+<li>constrain the shape of the input sender</li>
+</ul>
+<p>The current proposal goes with the second alternative. The main reason for this is that it tries to prevent silent dropping of results. The caller can always transform the input sender before passing it to <code class="sourceCode default">spawn()</code> doing the dropping of the values manually.</p>
+<blockquote>
+<p><strong>Chosen:</strong> <code class="sourceCode default">spawn()</code> accepts only senders that advertise <code class="sourceCode default">set_value()</code> (without any parameters) in the completion signatures.</p>
+</blockquote>
+<h3 data-number="6.2.2" id="handling-errors-in-spawn"><span class="header-section-number">6.2.2</span> Handling errors in <code class="sourceCode default">spawn</code><a href="#handling-errors-in-spawn" class="self-link"></a></h3>
+<p>The current proposal does not accept senders that can complete with error. This will prevent accidental errors scenarios that will terminate the application. The user must deal with all possible errors before passing the sender to <code class="sourceCode default">async_scope</code>. I.e., error handling must be explicit.</p>
+<p>Another alternative considered was to call <code class="sourceCode default">std::terminate()</code> when the sender completes with error. This was dropped because explicit error handling is preferred to stopping the application.</p>
+<p>Another alternative is to silently drop the errors when receiving them. This is considered bad practice, as it will often lead to spotting bugs to late.</p>
+<blockquote>
+<p><strong>Chosen:</strong> <code class="sourceCode default">spawn()</code> accepts only senders that do not call <code class="sourceCode default">set_error()</code>.</p>
+</blockquote>
+<h3 data-number="6.2.3" id="handling-stop-signals-in-spawn"><span class="header-section-number">6.2.3</span> Handling stop signals in <code class="sourceCode default">spawn</code><a href="#handling-stop-signals-in-spawn" class="self-link"></a></h3>
+<p>Similar to the error case, we have the alternative of allowing or forbidding <code class="sourceCode default">set_stopped</code> as a completion signal. Because the goal of <code class="sourceCode default">async_scope</code> is to track the lifetime of the work started through it, it shouldn’t matter whether that the work completed with success or by being stopped. As it is assumed that sending the stop signal is the result of an explicit choice, it makes sense to allow senders that can terminate with <code class="sourceCode default">set_stopped</code>.</p>
+<p>The alternative would require transforming the sender before passing it to spawn, something like <code class="sourceCode default">s.spawn(std::move(snd) | let_stopped([]{ return just_stopped(); ))</code>. This is considered boilerplate and not helpful, as the stopped scenarios should be explicit, and not exceptional.</p>
+<blockquote>
+<p><strong>Chosen:</strong> <code class="sourceCode default">spawn()</code> accepts senders that complete with <code class="sourceCode default">set_stopped()</code>.</p>
+</blockquote>
+<h3 data-number="6.2.4" id="no-shape-restrictions-for-the-senders-passed-to-spawn_future-and-nest"><span class="header-section-number">6.2.4</span> No shape restrictions for the senders passed to <code class="sourceCode default">spawn_future</code> and <code class="sourceCode default">nest</code><a href="#no-shape-restrictions-for-the-senders-passed-to-spawn_future-and-nest" class="self-link"></a></h3>
+<p>Similarly to <code class="sourceCode default">spawn()</code>, we can constrain <code class="sourceCode default">spawn_future()</code> and <code class="sourceCode default">nest()</code> to accept only a limited set of senders. But, because we can attach continuations for these senders, we would be limiting the functionality that can be expressed. For example, the continuation can react at different types of values and errors.</p>
+<blockquote>
+<p><strong>Chosen:</strong> <code class="sourceCode default">spawn_future()</code> and <code class="sourceCode default">nest()</code> accepts senders with any completion signatures.</p>
+</blockquote>
+<h2 data-number="6.3" id="stop-handling"><span class="header-section-number">6.3</span> Stop handling<a href="#stop-handling" class="self-link"></a></h2>
+<p>The paper requires that if the caller requests stop to an <code class="sourceCode default">async_scope</code> object, then this request is forwarded to the nested and spawned senders.</p>
+<h3 data-number="6.3.1" id="alternative-1-request_stop-on-the-async_scope-is-forwarded"><span class="header-section-number">6.3.1</span> Alternative 1: <code class="sourceCode default">request_stop</code> on the <code class="sourceCode default">async_scope</code> is forwarded<a href="#alternative-1-request_stop-on-the-async_scope-is-forwarded" class="self-link"></a></h3>
+<p>When stop is requested to <code class="sourceCode default">async_scope</code>, then stop is also requested to operations that are not yet complete. While this can be a good thing in many contexts, it is not the best strategy in all cases.</p>
+<p>Consider an <code class="sourceCode default">async_scope</code> that is used to keep track of the work needed to handle requests. When trying to gracefully shut down the application, one might need to drain the existing requests without stopping their processing. The way to do that is to use the <code class="sourceCode default"><em>on-empty-sender</em></code> without stopping the <code class="sourceCode default">async_scope</code>.</p>
+<p>Consider <code class="sourceCode default">spawn()</code> in isolation. Forwarding the cancellation of the <code class="sourceCode default">async_scope</code> to the spawned senders would be natural.</p>
+<p>Consider <code class="sourceCode default">nest()</code> and <code class="sourceCode default">spawn_future()</code>. They must combine two potential stop tokens. One from the <code class="sourceCode default">async_scope</code> and the other from the receiver passed to the returned <code class="sourceCode default"><em>nest-sender</em></code> and <code class="sourceCode default"><em>spawn-future-sender</em></code>. The semantics would be that either stop token would cancel the sender and would not stop the <code class="sourceCode default">async_scope</code>s <code class="sourceCode default">stop_source</code>.</p>
+<p>Consider the use case where a reference to an <code class="sourceCode default">async_scope</code> is provided to many nested operations and functions to attach senders that they produce. Some of those senders may restore an invariant in a file-system or some other system. The way for a nested operation and function to make sure that the invariant is not corrupted by a forwarded stop request from the <code class="sourceCode default">async_scope</code>, is to apply a <code class="sourceCode default">never_stoppable_token</code> to their sender to hide the token provided by the <code class="sourceCode default">async_scope</code>.</p>
+<h3 data-number="6.3.2" id="alternative-2-request_stop-on-the-async_scope-is-not-forwarded"><span class="header-section-number">6.3.2</span> Alternative 2: <code class="sourceCode default">request_stop</code> on the <code class="sourceCode default">async_scope</code> is not forwarded<a href="#alternative-2-request_stop-on-the-async_scope-is-not-forwarded" class="self-link"></a></h3>
+<p>A motivation for not forwarding a stop request was that a <code class="sourceCode default">stop_callback</code> is not a destructor, it is a signal requesting running work to stop. If <code class="sourceCode default">request_stop()</code> was called within the <code class="sourceCode default">async_scope</code> destructor, or any other destructor, then those destructors would be expected to block until an <code class="sourceCode default"><em>on-empty-sender</em></code> completed. As falling off a scope or having a shared_ptr count reach 0 is implicit, it is very difficult to ensure that a <code class="sourceCode default">request_stop()</code> followed by starting an <code class="sourceCode default"><em>on-empty-sender</em></code> would not have a race with concurrent calls to <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code>.</p>
+<h3 data-number="6.3.3" id="inverting-the-forwarding-default"><span class="header-section-number">6.3.3</span> Inverting the forwarding default<a href="#inverting-the-forwarding-default" class="self-link"></a></h3>
+<p>Either of the two cases can be simulated with the help of the other case.</p>
+<p>Example: When cancellation is not forwarded and forwarding is wanted, inject the same <code class="sourceCode default">stop_token</code> into all the spawned senders that need to be cancelled.</p>
+<p>Example: When cancellation is forwarded and forwarding is not wanted, mask the receiver provided <code class="sourceCode default">stop_token</code> by injecting a <code class="sourceCode default">never_stoppable_token</code> into all the spawned senders that need to complete even when cancelled.</p>
+<h3 data-number="6.3.4" id="result"><span class="header-section-number">6.3.4</span> Result<a href="#result" class="self-link"></a></h3>
+<blockquote>
+<p><strong>Chosen:</strong> <code class="sourceCode default">request_stop</code> on the <code class="sourceCode default">async_scope</code> is forwarded.</p>
+</blockquote>
+<h2 data-number="6.4" id="uses-in-other-concurrent-abstractions"><span class="header-section-number">6.4</span> Uses in other concurrent abstractions<a href="#uses-in-other-concurrent-abstractions" class="self-link"></a></h2>
+<p>We anticipate the interface <code class="sourceCode default">async_scope</code> to be used in other concurrent abstractions. This implies that it is useful to think of this interface in a larger context. If the interface is fit for the other purposes, it may be an indication that we have the right interface.</p>
+<p>Let us consider a concurrent abstraction that will serialize dynamic work provided to it. That is, if try to start multiple operations at the same time, only one is executed at a given time; the other ones are queued and will be executed whenever the previous operations complete.</p>
+<p>An interface to this abstraction might look like the following:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1"></a><span class="kw">struct</span> serializer <span class="op">{</span></span>
+<span id="cb21-2"><a href="#cb21-2"></a>    <span class="op">~</span>serializer<span class="op">()</span>;</span>
+<span id="cb21-3"><a href="#cb21-3"></a>    serializer<span class="op">(</span><span class="kw">const</span> serializer<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb21-4"><a href="#cb21-4"></a>    serializer<span class="op">(</span>serializer<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb21-5"><a href="#cb21-5"></a>    serializer<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> serializer<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb21-6"><a href="#cb21-6"></a>    serializer<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>serializer<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb21-7"><a href="#cb21-7"></a></span>
+<span id="cb21-8"><a href="#cb21-8"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb21-9"><a href="#cb21-9"></a>    <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb21-10"><a href="#cb21-10"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb21-11"><a href="#cb21-11"></a>    <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb21-12"><a href="#cb21-12"></a></span>
+<span id="cb21-13"><a href="#cb21-13"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
+<span id="cb21-14"><a href="#cb21-14"></a>    <em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb21-15"><a href="#cb21-15"></a>    </span>
+<span id="cb21-16"><a href="#cb21-16"></a>    in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb21-17"><a href="#cb21-17"></a>    in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb21-18"><a href="#cb21-18"></a>    <span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb21-19"><a href="#cb21-19"></a><span class="op">}</span>;</span></code></pre></div>
+<p>One can add work in the context of the serializer. One might want to add some work that needs to be executed in the serializer, then continue with some other work outside the serializer. One might want to wait until the serializer is drained, or might want to stop processing any work in the serializer. All of these can be fulfilled by this interface, and this is the same interface as <code class="sourceCode default">async_scope</code>.</p>
+<p>Similar to this abstraction, one might imagine abstractions that can execute maximum <em>N</em> concurrent work items, or abstractions that execute work based on given labels, or abstractions that execute work based on dynamic priorities, etc. All of these can be obtained by using an interface similar to the one we have for <code class="sourceCode default">async_scope</code>, maybe with some extra arguments.</p>
+<p>This provides a strong indication that the API for <code class="sourceCode default">async_scope</code> is appropriate.</p>
+<h2 data-number="6.5" id="removal-of-p2300s-start_detached"><span class="header-section-number">6.5</span> Removal of P2300’s <code class="sourceCode default">start_detached</code><a href="#removal-of-p2300s-start_detached" class="self-link"></a></h2>
+<p>The <code class="sourceCode default">async_scope::spawn</code> method can be used as a replacement for <code class="sourceCode default">start_detached</code> proposed in <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>. Essentially it does the same thing, but it can also control the lifetime of the spawned work.</p>
+<p>This paper might propose the removal of <code class="sourceCode default">start_detached</code> from <code class="sourceCode default">std::execution</code>. However, at this point, the paper doesn’t make this proposal.</p>
+<h2 data-number="6.6" id="supporting-pipe-operator"><span class="header-section-number">6.6</span> Supporting pipe operator<a href="#supporting-pipe-operator" class="self-link"></a></h2>
+<p>The paper, as expressed doesn’t support the pipe operator to be used in conjunction with <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code>. One might think that it is useful to write code like the following:</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb22-1"><a href="#cb22-1"></a>async_scope s;</span>
+<span id="cb22-2"><a href="#cb22-2"></a>std<span class="op">::</span>move<span class="op">(</span>snd1<span class="op">)</span> <span class="op">|</span> s<span class="op">.</span>spawn<span class="op">()</span>; <span class="co">// returns void</span></span>
+<span id="cb22-3"><a href="#cb22-3"></a>sender <span class="kw">auto</span> s <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>snd2<span class="op">)</span> <span class="op">|</span> s<span class="op">.</span>spawn_future<span class="op">()</span> <span class="op">|</span> then<span class="op">(...)</span>;</span></code></pre></div>
+<p>In <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> senders consumers won’t have support for pipe operator. As <code class="sourceCode default">spawn()</code> works similar to <code class="sourceCode default">start_detached</code> from <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>, which is a sender consumer, if we follow the same rationale, it makes sense not to support pipe operator for <code class="sourceCode default">spawn()</code>.</p>
+<p>On the other hand, <code class="sourceCode default">spawn_future()</code> is not a sender consumer, thus we might have considered adding pipe operator to it. To keep consistency with <code class="sourceCode default">spawn()</code>, at this point the paper doesn’t support pipe operator for <code class="sourceCode default">spawn_future()</code>.</p>
+<h2 data-number="6.7" id="use-of-customization-point-objects"><span class="header-section-number">6.7</span> Use of customization point objects<a href="#use-of-customization-point-objects" class="self-link"></a></h2>
+<p>Unlike <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>, this paper does not propose any use of customization point objects. While <code class="sourceCode default">start_detached</code> is a customization point object, its correspondent, <code class="sourceCode default">async_scope::spawn</code> is not.</p>
+<p>At this point, we do not believe that customizing the operations of <code class="sourceCode default">async_scope</code> will be needed by the users. Therefore, the paper does not propose any customization point objects.</p>
+<h1 data-number="7" id="q-a"><span class="header-section-number">7</span> Q &amp; A<a href="#q-a" class="self-link"></a></h1>
+<h2 data-number="7.1" id="why-does-async_scope-terminate-in-the-destructor-instead-of-blocking-like-jthread"><span class="header-section-number">7.1</span> Why does <code class="sourceCode default">async_scope</code> terminate in the destructor instead of blocking like <code class="sourceCode default">jthread</code>?<a href="#why-does-async_scope-terminate-in-the-destructor-instead-of-blocking-like-jthread" class="self-link"></a></h2>
+<p>One author’s perspective:</p>
+<ul>
+<li><code class="sourceCode default">jthread</code> blocking in the destructor is bad for composition.</li>
+<li><code class="sourceCode default">jthread</code> and <code class="sourceCode default">thread</code> should <code class="sourceCode default">terminate()</code> if the destructor runs before the thread exits.</li>
+</ul>
+<p>Imagine <code class="sourceCode default">make_shared&lt;jthread&gt;(...)</code>. Where will the destructor run? In what context will the destructor run?</p>
+<p>We can require users to know whether the destructor blocks for every type, and require users to carefully control the lifetime of all those objects – with the only indication of failure being a deadlock. Or we can teach that destructors will not block and indicate lifetime failures with <code class="sourceCode default">terminate()</code>.</p>
+<p>Software is less likely to ship with crashes and more likely to be fixed when there are crashes. Deadlocks result in users forcefully terminating the app and forced terminations are rarely reported to the developer as a bug and even if reported, tend to have no debug data (stacks, dumps, etc…). If there is a lifetime bug that you want fixed – it had better crash.</p>
+<p>Principles that lead to avoid blocking in the destructor:</p>
+<ul>
+<li>Blocking must be explicit (exiting a sync scope is implicit – and <code class="sourceCode default">shared_ptr</code> makes it even more scary).</li>
+<li>Blocking must be grepable.</li>
+<li>Blocking must be rare.</li>
+<li>Blocking is like <code class="sourceCode default">reinterpret_cast&lt;&gt;</code> – the name should be long and scary.</li>
+<li><code class="sourceCode default">join()</code> is a terrible design – this is why async_scope has <code class="sourceCode default">on_empty()</code> instead.</li>
+<li>Every asynchronous lifetime must be managed with non-blocking primitives and only <code class="sourceCode default">sync_wait()</code> is used to block.</li>
+</ul>
+<h2 data-number="7.2" id="why-doesnt-the-async_scope-destructor-stop-all-the-nested-and-spawned-senders"><span class="header-section-number">7.2</span> Why doesn’t the <code class="sourceCode default">async_scope</code> destructor stop all the nested and spawned senders?<a href="#why-doesnt-the-async_scope-destructor-stop-all-the-nested-and-spawned-senders" class="self-link"></a></h2>
+<p>One author’s perspective:</p>
+<ul>
+<li><code class="sourceCode default">stop_callback</code> is not a destructor because:
+<ul>
+<li><code class="sourceCode default">request_stop()</code> is <strong>asking</strong> for early completion.</li>
+<li><code class="sourceCode default">request_stop()</code> does not end the lifetime of the operation, <code class="sourceCode default">set_value()</code>, <code class="sourceCode default">set_error()</code> and <code class="sourceCode default">set_stopped()</code> end the lifetime – those are the destructors for an operation.</li>
+<li><code class="sourceCode default">request_stop()</code> might result in completion with <code class="sourceCode default">set_stopped()</code>, but <code class="sourceCode default">set_value()</code> and <code class="sourceCode default">set_error()</code> are equally likely.</li>
+</ul></li>
+</ul>
+<p><code class="sourceCode default">request_stop()</code> should not be called from a destructor because: If a sync context intends to ask for early completion of an async operation, then it needs to wait for that operation to actually complete before continuing (<code class="sourceCode default">set_value()</code>, <code class="sourceCode default">set_error()</code> and <code class="sourceCode default">set_stopped()</code> are the destructors for the async operation), and sync destructors must not block. See <a href="#why-does-async_scope-terminate-in-the-destructor-instead-of-blocking-like-jthread">Why does <code class="sourceCode default">async_scope</code> terminate in the destructor instead of blocking like <code class="sourceCode default">jthread</code>?</a>.</p>
+<blockquote>
+<p>NOTE: async RAII, could be used to signal early completion because it would be composed with other async operation lifetimes. The operation being stopped would complete before the async RAII operation completed – without any blocking.</p>
+</blockquote>
+<h1 data-number="8" id="naming"><span class="header-section-number">8</span> Naming<a href="#naming" class="self-link"></a></h1>
+<p>As is often true, naming is a difficult task.</p>
+<h2 data-number="8.1" id="async_scope"><span class="header-section-number">8.1</span> <code class="sourceCode default">async_scope</code><a href="#async_scope" class="self-link"></a></h2>
+<p>This represents the root of a set of nested lifetimes.</p>
+<p>One mental model for this is a semaphore. It tracks a count of lifetimes and fires an event when the count reaches 0.</p>
+<p>Another mental model for this is block syntax. <code class="sourceCode default">{}</code> represents the root of a set of lifetimes of locals and temporaries and nested blocks.</p>
+<p>Another mental model for this is a container. This is the least accurate model. This container is a value that does not contain values. This container contains a set of lifetimes that have not completed (a lifetime is not a value).</p>
+<p>alternatives: <code class="sourceCode default">sender_scope</code>, <code class="sourceCode default">dynamic_scope</code>, <code class="sourceCode default">dynamic_lifetime</code>, <code class="sourceCode default">scope</code>, <code class="sourceCode default">lifetime</code></p>
+<h2 data-number="8.2" id="nest-1"><span class="header-section-number">8.2</span> <code class="sourceCode default">nest</code><a href="#nest-1" class="self-link"></a></h2>
+<p>This provides a way to extend the lifetime to include a sender. This does not allocate state, call connect or start. This is the basic operation for <code class="sourceCode default">async_scope</code>. <code class="sourceCode default">spawn</code> and <code class="sourceCode default">spawn_future</code> use <code class="sourceCode default">nest</code> to extend the scope and then allocate, connect and start.</p>
+<p>It would be good for the name to indicate that it is a simple operation (insert, add, embed, extend might communicate allocation, which this does not do).</p>
+<p>alternatives: <code class="sourceCode default">add</code>, <code class="sourceCode default">extend</code>, <code class="sourceCode default">embed</code>, <code class="sourceCode default">include</code></p>
+<h2 data-number="8.3" id="spawn-1"><span class="header-section-number">8.3</span> <code class="sourceCode default">spawn</code><a href="#spawn-1" class="self-link"></a></h2>
+<p>This provides a way to start a sender that produces <code class="sourceCode default">void</code> and extend the lifetime of the <code class="sourceCode default">async_scope</code> to exceed the lifetime of the operation. This allocates, connects and starts the sender.</p>
+<p>It would be good for the name to indicate that it is an expensive operation.</p>
+<p>alternatives: <code class="sourceCode default">start</code>, <code class="sourceCode default">submit</code>, <code class="sourceCode default">enqueue</code>, <code class="sourceCode default">do</code>, <code class="sourceCode default">run</code></p>
+<h2 data-number="8.4" id="spawn_future-1"><span class="header-section-number">8.4</span> <code class="sourceCode default">spawn_future</code><a href="#spawn_future-1" class="self-link"></a></h2>
+<p>This provides a way to start work and later ask for the result. This will allocate, connect, start and resolve the race (using synchronization primitives) between the completion of the given sender and the start of the returned sender. Since the type of the receiver supplied to the result sender is not known when the given sender starts, the receiver will be type-erased when it is connected.</p>
+<p>It would be good for this name to be ugly to indicate that it is very expensive.</p>
+<p>alternatives: <code class="sourceCode default">spawn_continue</code>, <code class="sourceCode default">spawn_result</code>, <code class="sourceCode default">spawn_with_result</code>, <code class="sourceCode default">spawn_buffered</code>, <code class="sourceCode default">spawn_virtual</code>, <code class="sourceCode default">spawn_dynamic</code></p>
+<blockquote>
+<p><em>Note</em>: “<code class="sourceCode default">spawn</code>” in these alternatives would be replaced by the alternative selected for <code class="sourceCode default">spawn</code></p>
+</blockquote>
+<h2 data-number="8.5" id="on_empty"><span class="header-section-number">8.5</span> <code class="sourceCode default">on_empty</code><a href="#on_empty" class="self-link"></a></h2>
+<p>This provides a way to get a sender that completes when the all the lifetimes nested inside the <code class="sourceCode default">async_scope</code> complete.</p>
+<p><code class="sourceCode default">empty</code> falls out of the poor mental model of <code class="sourceCode default">async_scope</code> being a container. <code class="sourceCode default">ended</code>, <code class="sourceCode default">complete</code> etc.. are problematic because additional senders might be used to extend the lifetime after the sender returned has completed.</p>
+<p>This is the async version of a ‘get’ member function. A pattern was established a long time ago to not prefix ‘get’ methods on an object in std with <code class="sourceCode default">get_</code>. What is the current guidance? Do we want a prefix for async queries on objects in std?</p>
+<p>alternatives: <code class="sourceCode default">empty</code>, <code class="sourceCode default">ready</code>, <code class="sourceCode default">when_empty</code>, <code class="sourceCode default">when_ready</code>, <code class="sourceCode default">on_ready</code></p>
+<h2 data-number="8.6" id="table-of-how-some-alternatives-might-be-combined"><span class="header-section-number">8.6</span> table of how some alternatives might be combined<a href="#table-of-how-some-alternatives-might-be-combined" class="self-link"></a></h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 5%"></col>
+<col style="width: 27%"></col>
+<col style="width: 11%"></col>
+<col style="width: 15%"></col>
+<col style="width: 22%"></col>
+<col style="width: 17%"></col>
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: center;"><div style="text-align:center">
+<strong>id</strong>
+</div></th>
+<th style="text-align: left;"><div style="text-align:center">
+<strong>comments</strong>
+</div></th>
+<th style="text-align: left;"><div style="text-align:center">
+<strong>nest</strong>
+</div></th>
+<th style="text-align: left;"><div style="text-align:center">
+<strong>spawn void</strong>
+</div></th>
+<th style="text-align: left;"><div style="text-align:center">
+<strong>spawn w/result</strong>
+</div></th>
+<th style="text-align: left;"><div style="text-align:center">
+<strong>empty</strong>
+</div></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">a:</td>
+<td style="text-align: left;">status quo</td>
+<td style="text-align: left;"><code class="sourceCode default">nest</code></td>
+<td style="text-align: left;"><code class="sourceCode default">spawn</code></td>
+<td style="text-align: left;"><code class="sourceCode default">spawn_future</code></td>
+<td style="text-align: left;"><code class="sourceCode default">on_empty</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">b:</td>
+<td style="text-align: left;">removes confusion around “future”, “empty” and “nest”</td>
+<td style="text-align: left;"><code class="sourceCode default">add</code></td>
+<td style="text-align: left;"><code class="sourceCode default">spawn</code></td>
+<td style="text-align: left;"><code class="sourceCode default">spawn_continue</code></td>
+<td style="text-align: left;"><code class="sourceCode default">when_empty</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">c:</td>
+<td style="text-align: left;">tries to match the <code class="sourceCode default">start_detached</code></td>
+<td style="text-align: left;"><code class="sourceCode default">add</code></td>
+<td style="text-align: left;"><code class="sourceCode default">start</code></td>
+<td style="text-align: left;"><code class="sourceCode default">start_continue</code></td>
+<td style="text-align: left;"><code class="sourceCode default">when_empty</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">d:</td>
+<td style="text-align: left;">tries an alternative to using “continue”</td>
+<td style="text-align: left;"><code class="sourceCode default">add</code></td>
+<td style="text-align: left;"><code class="sourceCode default">start</code></td>
+<td style="text-align: left;"><code class="sourceCode default">start_chain</code></td>
+<td style="text-align: left;"><code class="sourceCode default">when_empty</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">e:</td>
+<td style="text-align: left;">tries an alternative “result” and “extend” and “ready”</td>
+<td style="text-align: left;"><code class="sourceCode default">extend</code></td>
+<td style="text-align: left;"><code class="sourceCode default">start</code></td>
+<td style="text-align: left;"><code class="sourceCode default">start_result</code></td>
+<td style="text-align: left;"><code class="sourceCode default">on_ready</code></td>
+</tr>
+</tbody>
+</table>
+<h1 data-number="9" id="specification"><span class="header-section-number">9</span> Specification<a href="#specification" class="self-link"></a></h1>
+<h2 data-number="9.1" id="synopsis"><span class="header-section-number">9.1</span> Synopsis<a href="#synopsis" class="self-link"></a></h2>
+<div class="sourceCode" id="cb23"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb23-1"><a href="#cb23-1"></a><span class="kw">namespace</span> std<span class="op">::</span>execution <span class="op">{</span></span>
+<span id="cb23-2"><a href="#cb23-2"></a></span>
+<span id="cb23-3"><a href="#cb23-3"></a><span class="kw">namespace</span> <span class="op">{</span> <span class="co">// <em>exposition-only</em> </span></span>
+<span id="cb23-4"><a href="#cb23-4"></a>    <span class="kw">struct</span> <em>spawn-receiver</em> <span class="op">{</span> <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb23-5"><a href="#cb23-5"></a>        <span class="kw">friend</span> <span class="dt">void</span> set_value<span class="op">(</span><em>spawn-receiver</em><span class="op">)</span> <span class="kw">noexcept</span>;</span>
+<span id="cb23-6"><a href="#cb23-6"></a>        <span class="kw">friend</span> <span class="dt">void</span> set_stopped<span class="op">(</span><em>spawn-receiver</em><span class="op">)</span> <span class="kw">noexcept</span>;</span>
+<span id="cb23-7"><a href="#cb23-7"></a>    <span class="op">}</span>;</span>
+<span id="cb23-8"><a href="#cb23-8"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> S<span class="op">&gt;</span></span>
+<span id="cb23-9"><a href="#cb23-9"></a>    <span class="kw">struct</span> <em>nest-sender</em>; <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb23-10"><a href="#cb23-10"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> S<span class="op">&gt;</span></span>
+<span id="cb23-11"><a href="#cb23-11"></a>    <span class="kw">struct</span> <em>spawn-future-sender</em>; <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb23-12"><a href="#cb23-12"></a>    <span class="kw">struct</span> <em>on-empty-sender</em> <span class="op">{</span> <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb23-13"><a href="#cb23-13"></a>        <span class="kw">using</span> completion_signatures <span class="op">=</span></span>
+<span id="cb23-14"><a href="#cb23-14"></a>            execution<span class="op">::</span>completion_signatures<span class="op">&lt;</span></span>
+<span id="cb23-15"><a href="#cb23-15"></a>                execution<span class="op">::</span>set_value_t<span class="op">()</span></span>
+<span id="cb23-16"><a href="#cb23-16"></a>            <span class="op">&gt;</span>;</span>
+<span id="cb23-17"><a href="#cb23-17"></a>    <span class="op">}</span>;</span>
+<span id="cb23-18"><a href="#cb23-18"></a><span class="op">}</span></span>
+<span id="cb23-19"><a href="#cb23-19"></a></span>
+<span id="cb23-20"><a href="#cb23-20"></a><span class="kw">struct</span> async_scope <span class="op">{</span></span>
+<span id="cb23-21"><a href="#cb23-21"></a>    <span class="op">~</span>async_scope<span class="op">()</span>;</span>
+<span id="cb23-22"><a href="#cb23-22"></a>    async_scope<span class="op">(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb23-23"><a href="#cb23-23"></a>    async_scope<span class="op">(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb23-24"><a href="#cb23-24"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb23-25"><a href="#cb23-25"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb23-26"><a href="#cb23-26"></a></span>
+<span id="cb23-27"><a href="#cb23-27"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span></span>
+<span id="cb23-28"><a href="#cb23-28"></a>    <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb23-29"><a href="#cb23-29"></a></span>
+<span id="cb23-30"><a href="#cb23-30"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb23-31"><a href="#cb23-31"></a>    <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb23-32"><a href="#cb23-32"></a></span>
+<span id="cb23-33"><a href="#cb23-33"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb23-34"><a href="#cb23-34"></a>    <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb23-35"><a href="#cb23-35"></a></span>
+<span id="cb23-36"><a href="#cb23-36"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
+<span id="cb23-37"><a href="#cb23-37"></a>    <em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb23-38"><a href="#cb23-38"></a>    </span>
+<span id="cb23-39"><a href="#cb23-39"></a>    in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb23-40"><a href="#cb23-40"></a>    in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb23-41"><a href="#cb23-41"></a>    <span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb23-42"><a href="#cb23-42"></a><span class="op">}</span>;</span>
+<span id="cb23-43"><a href="#cb23-43"></a></span>
+<span id="cb23-44"><a href="#cb23-44"></a><span class="op">}</span></span></code></pre></div>
+<h2 data-number="9.2" id="async_scopeasync_scope"><span class="header-section-number">9.2</span> <code class="sourceCode default">async_scope::~async_scope</code><a href="#async_scopeasync_scope" class="self-link"></a></h2>
+<ol type="1">
+<li><p><code class="sourceCode default">async_scope::~async_scope</code> destructs the <code class="sourceCode default">async_scope</code> object, freeing all resources</p></li>
+<li><p>The destructor will call <code class="sourceCode default">terminate()</code> if there is outstanding work in the <code class="sourceCode default">async_scope</code> object (i.e., work created by <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> did not complete).</p></li>
+<li><p><em>Note</em>: It is always safe to call the destructor after the sender returned by <code class="sourceCode default">on_empty()</code> sent the completion signal, provided that there were no calls to <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> since the <code class="sourceCode default"><em>on-empty-sender</em></code> was started.</p></li>
+</ol>
+<h2 data-number="9.3" id="async_scopespawn"><span class="header-section-number">9.3</span> <code class="sourceCode default">async_scope::spawn</code><a href="#async_scopespawn" class="self-link"></a></h2>
+<ol type="1">
+<li><code class="sourceCode default">async_scope::spawn</code> is used to eagerly start a sender while keeping the execution in the lifetime of the <code class="sourceCode default">async_scope</code> object.</li>
+<li><em>Effects</em>:
+<ul>
+<li>An <code class="sourceCode default"><em>operation-state</em></code> object <code class="sourceCode default">op</code> will be created by connecting the given sender to a receiver <code class="sourceCode default">recv</code> of type <code class="sourceCode default"><em>spawn-receiver</em></code>.</li>
+<li>If an exception occurs will be trying to create <code class="sourceCode default">op</code> in its proper storage space, the exception will be passed to the caller.</li>
+<li>If no exception is thrown while creating <code class="sourceCode default">op</code> and stop was not requested on our stop source, then:
+<ul>
+<li><code class="sourceCode default">start(op)</code> is called (before <code class="sourceCode default">spawn()</code> returns).</li>
+<li>The lifetime of <code class="sourceCode default">op</code> extends at least until <code class="sourceCode default">recv</code> is called with a completion notification.</li>
+<li>If the given work calls <code class="sourceCode default">set_error()</code> on <code class="sourceCode default">recv</code> then <code class="sourceCode default">std::terminate()</code> will be called.</li>
+</ul></li>
+<li><code class="sourceCode default">recv</code> supports the <code class="sourceCode default">get_stop_token()</code> query customization point object; this will return the stop token associated with <code class="sourceCode default">async_scope</code> object.</li>
+</ul></li>
+<li><em>Note</em>: the receiver will help the <code class="sourceCode default">async_scope</code> object to keep track of how many operations are running at a given time.</li>
+</ol>
+<h2 data-number="9.4" id="async_scopespawn_future"><span class="header-section-number">9.4</span> <code class="sourceCode default">async_scope::spawn_future</code><a href="#async_scopespawn_future" class="self-link"></a></h2>
+<ol type="1">
+<li><p><code class="sourceCode default">async_scope::spawn_future</code> is used to eagerly start a sender in the context of the <code class="sourceCode default">async_scope</code> object, and returning a sender that will be triggered after the completion of the given sender. The lifetime of the returned sender is not associated with <code class="sourceCode default">async_scope</code>.</p></li>
+<li><p>The returned sender has the same completion signatures as the input sender.</p></li>
+<li><p><em>Effects</em>:</p>
+<ul>
+<li>An <code class="sourceCode default"><em>operation-state</em></code> object <code class="sourceCode default">op</code> will be created by connecting the given sender to a receiver <code class="sourceCode default">recv</code>.</li>
+<li>If an exception occurs will be trying to create <code class="sourceCode default">op</code> in its proper storage space, the exception will be passed to the caller.</li>
+<li>If no exception is thrown while creating <code class="sourceCode default">op</code> and stop was not requested on our stop source, then:
+<ul>
+<li><code class="sourceCode default">start(op)</code> is called (before <code class="sourceCode default">spawn_future</code> returns).</li>
+<li>The lifetime of <code class="sourceCode default">op</code> extends at least until <code class="sourceCode default">recv</code> is called with a completion notification.</li>
+<li>If <code class="sourceCode default">rsnd</code> is the returned sender, then using it has the following effects:
+<ul>
+<li>Let <code class="sourceCode default">ext_op</code> be the <code class="sourceCode default"><em>operation-state</em></code> object returned by connecting <code class="sourceCode default">rsnd</code> to a receiver <code class="sourceCode default">ext_recv</code>.</li>
+<li>If <code class="sourceCode default">ext_op</code> is started, the completion notifications received by <code class="sourceCode default">recv</code> will be forwarded to <code class="sourceCode default">ext_recv</code>, regardless whether the completion notification happened before starting <code class="sourceCode default">ext_op</code> or not.</li>
+<li>It is safe not to connect <code class="sourceCode default">rsnd</code> or not to start <code class="sourceCode default">ext_op</code>.</li>
+</ul></li>
+</ul></li>
+<li><code class="sourceCode default">recv</code> supports the <code class="sourceCode default">get_stop_token()</code> query customization point object; this will return a stop token object that will be stopped when:
+<ul>
+<li>the <code class="sourceCode default">async_scope</code> object is stopped (i.e., by using <code class="sourceCode default">async_scope::request_stop()</code>;</li>
+<li>if <code class="sourceCode default">rsnd</code> supports <code class="sourceCode default">get_stop_token()</code> query customization point object, when stop is requested to the object <code class="sourceCode default">get_stop_token(rsnd)</code>.</li>
+</ul></li>
+</ul></li>
+<li><p><em>Note</em>: the receiver <code class="sourceCode default">recv</code> will help the <code class="sourceCode default">async_scope</code> object to keep track of how many operations are running at a given time.</p></li>
+<li><p><em>Note</em>: the type of completion signal that <code class="sourceCode default">op</code> will use does not influence the behavior of <code class="sourceCode default">async_scope</code> (i.e., <code class="sourceCode default">async_scope</code> object behaves the same way if the sender describes a work that ends with success, error or cancellation).</p></li>
+<li><p><em>Note</em>: cancelling the sender returned by this function will not have an effect about the <code class="sourceCode default">async_scope</code> object.</p></li>
+</ol>
+<h2 data-number="9.5" id="async_scopenest"><span class="header-section-number">9.5</span> <code class="sourceCode default">async_scope::nest</code><a href="#async_scopenest" class="self-link"></a></h2>
+<ol type="1">
+<li><p><code class="sourceCode default">async_scope::nest</code> is used to produce a <code class="sourceCode default"><em>nest-sender</em></code> that nests the sender within the lifetime of the <code class="sourceCode default">async_scope</code> object. The given sender will be started when the <code class="sourceCode default"><em>nest-sender</em></code> is started.</p></li>
+<li><p>The returned sender has the same completion signatures as the input sender.</p></li>
+<li><p><em>Effects</em>:</p>
+<ul>
+<li>If <code class="sourceCode default">rsnd</code> is the returned <code class="sourceCode default"><em>nest-sender</em></code>, then using it has the following effects:
+<ul>
+<li>Let <code class="sourceCode default">op</code> be the <code class="sourceCode default"><em>operation-state</em></code> object returned by connecting the given sender to a receiver <code class="sourceCode default">recv</code>.</li>
+<li>Let <code class="sourceCode default">ext_op</code> be the <code class="sourceCode default"><em>operation-state</em></code> object returned by connecting <code class="sourceCode default">rsnd</code> to a receiver <code class="sourceCode default">ext_recv</code>.</li>
+<li>Let <code class="sourceCode default">op</code> be stored in <code class="sourceCode default">ext_op</code>.</li>
+<li>If <code class="sourceCode default">ext_op</code> is started, then <code class="sourceCode default">op</code> is started and the completion notifications received by <code class="sourceCode default">recv</code> will be forwarded to <code class="sourceCode default">ext_recv</code>.</li>
+<li>It is safe not to connect <code class="sourceCode default">rsnd</code> or not to start <code class="sourceCode default">ext_op</code>.</li>
+<li><em>Note</em>: as <code class="sourceCode default">op</code> is stored in <code class="sourceCode default">ext_op</code>, calling <code class="sourceCode default">nest()</code> cannot start the given work.</li>
+</ul></li>
+<li>The <code class="sourceCode default">async_scope</code> will not be <em>empty</em> until one of the following is true:
+<ul>
+<li><code class="sourceCode default">rsnd</code> is destroyed without being connected</li>
+<li><code class="sourceCode default">rsnd</code> is connected but <code class="sourceCode default">ext_op</code> is destroyed without being started</li>
+<li><code class="sourceCode default">ext_op</code> is started, and <code class="sourceCode default">recv</code> is notified about the completion of the given sender</li>
+</ul></li>
+<li><code class="sourceCode default">recv</code> supports the <code class="sourceCode default">get_stop_token()</code> query customization point object; this will return a stop token object that will be stopped when:
+<ul>
+<li>the <code class="sourceCode default">async_scope</code> object is stopped (i.e., by using <code class="sourceCode default">async_scope::request_stop()</code>;</li>
+<li>if <code class="sourceCode default">rsnd</code> supports <code class="sourceCode default">get_stop_token()</code> query customization point object, when stop is requested to the object <code class="sourceCode default">get_stop_token(rsnd)</code>.</li>
+</ul></li>
+</ul></li>
+<li><p><em>Note</em>: the type of completion signal that <code class="sourceCode default">op</code> will use does not influence the behavior of <code class="sourceCode default">async_scope</code> (i.e., <code class="sourceCode default">async_scope</code> object behaves the same way if the sender describes a work that ends with success, error or cancellation).</p></li>
+<li><p><em>Note</em>: cancelling the sender returned by this function will not have an effect about the <code class="sourceCode default">async_scope</code> object.</p></li>
+</ol>
+<h2 data-number="9.6" id="async_scopeon_empty"><span class="header-section-number">9.6</span> <code class="sourceCode default">async_scope::on_empty</code><a href="#async_scopeon_empty" class="self-link"></a></h2>
+<ol type="1">
+<li><p><code class="sourceCode default">async_scope::on_empty</code> returns a sender that can be used to get notifications when all the work belonging to the <code class="sourceCode default">async_scope</code> object is completed.</p></li>
+<li><p><em>Effects</em>:</p>
+<ul>
+<li>Let <code class="sourceCode default">rsnd</code> be the sender returned by this function</li>
+<li>Let <code class="sourceCode default">ext_op</code> be the <code class="sourceCode default"><em>operation-state</em></code> object returned by connecting <code class="sourceCode default">rsnd</code> to a receiver <code class="sourceCode default">ext_recv</code>.</li>
+<li>If <code class="sourceCode default">ext_op</code> is started, then <code class="sourceCode default">ext_recv</code> will be notified with <code class="sourceCode default">set_value()</code> whenever all the work started in the context of the <code class="sourceCode default">async_scope</code> object (by using <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn</code> and <code class="sourceCode default">spawn_future</code>) is completed, and no senders are in flight.</li>
+<li>It is safe not to connect <code class="sourceCode default">rsnd</code> or not to start <code class="sourceCode default">ext_op</code>.</li>
+</ul></li>
+<li><p><em>Note</em>: it is safe to call <code class="sourceCode default">on_empty()</code> multiple times on the same object and use the returned sender; it is also safe to use the returned senders in parallel.</p></li>
+<li><p><em>Note</em>: it is safe to call <code class="sourceCode default">on_empty()</code> and use the returned sender in parallel to calling <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> on the same <code class="sourceCode default">async_scope</code> object.</p></li>
+<li><p><em>Note</em>: it is not safe to destruct the <code class="sourceCode default">async_scope</code> when the sender returned from a call to <code class="sourceCode default">on_empty()</code> completes after being used in parallel to calling <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> on the same <code class="sourceCode default">async_scope</code> object.</p></li>
+</ol>
+<h2 data-number="9.7" id="async_scopeget_stop_source"><span class="header-section-number">9.7</span> <code class="sourceCode default">async_scope::get_stop_source</code><a href="#async_scopeget_stop_source" class="self-link"></a></h2>
+<ol type="1">
+<li>Returns an <code class="sourceCode default">in_place_stop_source</code> object associated with <code class="sourceCode default">async_scope</code>.</li>
+<li>Requesting stop on the returned stop source will have the following effects:
+<ul>
+<li>work added to the <code class="sourceCode default">async_scope</code> object by using <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> is given a stop token that already has <code class="sourceCode default">stop_requested() == true</code>.</li>
+<li>stop is requested for all the ongoing work added to <code class="sourceCode default">async_scope</code> by means of <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code>.</li>
+</ul></li>
+</ol>
+<h2 data-number="9.8" id="async_scopeget_stop_token"><span class="header-section-number">9.8</span> <code class="sourceCode default">async_scope::get_stop_token</code><a href="#async_scopeget_stop_token" class="self-link"></a></h2>
+<ol type="1">
+<li>This is equivalent to calling <code class="sourceCode default">get_stop_source().get_token()</code>.</li>
+</ol>
+<h2 data-number="9.9" id="async_scoperequest_stop"><span class="header-section-number">9.9</span> <code class="sourceCode default">async_scope::request_stop</code><a href="#async_scoperequest_stop" class="self-link"></a></h2>
+<ol type="1">
+<li>This is equivalent to calling <code class="sourceCode default">get_stop_source().request_stop()</code>.</li>
+</ol>
+<h1 data-number="10" id="bibliography"><span class="header-section-number">10</span> References<a href="#bibliography" class="self-link"></a></h1>
+<div id="refs" class="references hanging-indent" role="doc-bibliography">
+<div id="ref-Dahl72">
+<p>[Dahl72] O.-J. Dahl, E. W. Dijkstra, and C. A. R. Hoare. <em>Structured Programming</em>. Academic Press Ltd., 1972.</p>
+</div>
+<div id="ref-P2079R2">
+<p>[P2079R2] Lee Howes, Ruslan Arutyunyan, Michael Voss. 2022-01-15. System execution context. <br />
+<a href="https://wg21.link/p2079r2">https://wg21.link/p2079r2</a></p>
+</div>
+<div id="ref-P2300R4">
+<p>[P2300R4] Michał Dominiak, Lewis Baker, Lee Howes, Kirk Shoop, Michael Garland, Eric Niebler, Bryce Adelstein Lelbach. 2022-01-19. std::execution. <br />
+<a href="https://wg21.link/p2300r4">https://wg21.link/p2300r4</a></p>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>
