@@ -1,5 +1,5 @@
 ---
-title: "async_scope - Creating scopes for non-sequential concurrency"
+title: "`async_scope` -- Creating scopes for non-sequential concurrency"
 subtitle: "Draft Proposal"
 document: D2519R0
 date: today
