@@ -228,7 +228,6 @@ sender auto process_row(tabular_data&, int row);
 sender auto process_col(tabular_data&, int col);
 
 sender auto process(scheduler auto sch, tabular_data& data) {
-  async_scope& scope = *(new async_scope{});
   return schedule(sch)
        | let_value_with(
            []{ return async_scope{}; },
@@ -344,7 +343,16 @@ An `async_scope` object must outlive work that is spawned on it.
 It should be viewed as owning the storage for that work.
 The `async_scope` may be constructed in a local context, matching the syntactic scope or the lifetime of surrounding algorithms.
 The destructor of an `async_scope` will `terminate()` if there is outstanding work in the scope at destruction time.
-One way to ensure that there is no work in scope is to start the sender returned by `on_empty` and wait for its completion; and ensure that no work is being added to the scope in the meantime.
+
+Another way for viewing the `async_scope` is that it keeps a counter of how many work items were registered to it but have not yet completed (not yet started, or in execution).
+The destructor can be called only if this counter is zero.
+
+One way to ensure that there is no work in scope at destruction time is to start the sender returned by `on_empty()` and wait for its completion (while no more work being added into the scope).
+
+Please note that there is a race between the completion of the sender returned by `on_empty()` and adding new work to the `async_scope` object.
+If new work is added from a work that is already in the scope, then the implementation guarantees that there is no race.
+If, however, new work is added from a different source, the implementation cannot prevent the race.
+For example, one can imagine that the new work is added just after the `on_empty()` sender completes.
 
 Please see [Q & A](#q-a) section for more details on reasons why calling `terminate()` is preferred to implicit waiting.
 
@@ -358,6 +366,7 @@ Eagerly launches work on the `async_scope`.
 This involves an allocation for the `@_operation-state_@` of the sender until it completes.
 
 This is similar to `start_detached()` from [@P2300R4], but we keep track of the lifetime of the given work.
+The addition of `async_scope::spawn()` would allow us to remove `start_detached()` from [@P2300R4].   
 
 The given sender must complete with `void` or be stopped.
 It is not accepted a sender that can complete with errors; the user must explicitly handle the errors that might appear before passing the corresponding sender to `spawn`.
@@ -388,6 +397,7 @@ Eagerly launches work on the `async_scope` but returns a `@_spawn-future-sender_
 This involves an allocation for the `@_operation-state_@` of the sender, until it completes, and synchronization to resolve the race between the production of the result and the consumption of the result.
 
 This is similar to `ensure_started()` from [@P2300R4].
+The addition of `async_scope::spawn_future()` would allow us to remove `ensure_started()` from [@P2300R4].   
 
 Unlike `spawn()`, the input sender passed to `spawn_future()` is not constrained on a given shape.
 It may send different types of values, and it can complete with errors.  
@@ -397,7 +407,7 @@ It is safe to drop the sender returned from `spawn_future()` without starting it
 Please note that there is a race between the completion of the given sender and the start of the returned sender.
 The race will be resolved by the `@_spawn-future-sender_@<>` state.
 
-Cancelling the returned sender, cancels `s` but does not cancel the `async_scope`.
+Cancelling the returned sender, cancels `s` but does not cancel the `async_scope`, but the cancellation would be propagated to the given sender.
 
 Usage example:
 ```c++
@@ -429,9 +439,14 @@ Similar to `spawn_future()`, `nest()` doesn't constrain the input sender to any 
 Any type of sender is accepted.
 
 The returned sender prevents the scope from ending.
-It is safe to drop it without starting it and this will remove it from the `async_scope` lifetime.
+It is safe to drop it without starting it; the `async_scope` object will behave as if the operation was completed.
 
 As `nest()` does not immediately start the given work, it is ok to pass in blocking senders.
+
+One can say that `nest()` is more fundamental than `spawn()` and `spawn_future()` as the latter two can be implemented in terms of `spawn()`.
+In terms of performance, `nest()` does not introduce any penalty.
+`spawn()` is more expensive than `nest()` as it needs to allocate memory for the operation.
+`spawn_future()` is even more expensive than `nest()`; the receiver needs to be type-erased and a possible race condition needs to be avoided.
 
 Cancelling the returned sender, once it is connected and started, cancels `s` but does not cancel the `async_scope`.
 
@@ -462,7 +477,7 @@ An `async_scope` can be *empty* more than once.
 The intended usage is to spawn all the senders and then start the `@_on-empty-sender_@` to know when all spawned senders have completed.
 
 To safely destroy the `async_scope` object it's recommended to use `@_on-empty-sender_@` to get notified when the scope object finished executing all the work.
-In this case, the `@_on-empty-sender_@` start must happen-after all calls to (non-cancelled) `nest()`, `spawn()` and `spawn_future()` are complete.
+Moreover, after starting `@_on-empty-sender_@`, one should not call `nest()`, `spawn()` and `spawn_future()` from work outside the scope.
 
 That is to say the following is safe:
 ```cpp
@@ -1006,13 +1021,15 @@ struct async_scope {
    - Let `rsnd` be the sender returned by this function
    - Let `ext_op` be the `@_operation-state_@` object returned by connecting `rsnd` to a receiver `ext_recv`.
    - If `ext_op` is started, then `ext_recv` will be notified with `set_value()` whenever all the work started in the context of the `async_scope` object (by using `nest()`, `spawn` and `spawn_future`) is completed, and no senders are in flight.
+   - If, after `on_empty()` is called, new work is added to the scope from other work that is started in the context of the scope then the new work must complete or be dropped before `ext_recv` is notified for completion.
    - It is safe not to connect `rsnd` or not to start `ext_op`.
 
 3. *Note*: it is safe to call `on_empty()` multiple times on the same object and use the returned sender; it is also safe to use the returned senders in parallel.
 
 4. *Note*: it is safe to call `on_empty()` and use the returned sender in parallel to calling `nest()`, `spawn()` and `spawn_future()` on the same `async_scope` object.
 
-5. *Note*: it is not safe to destruct the `async_scope` when the sender returned from a call to `on_empty()` completes after being used in parallel to calling `nest()`, `spawn()` and `spawn_future()` on the same `async_scope` object.
+5. *Note*: there is a race between the completion of `on_empty()` and adding new work into the scope (from work that is not tracked by the `async_scope` object).
+   The returned sender might indicate that the `async_scope` is empty at the same time, or immediately after new work is added to it.
 
 ## `async_scope::get_stop_source`
 
