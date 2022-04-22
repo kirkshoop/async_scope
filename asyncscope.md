@@ -11,6 +11,8 @@ author:
     email: <kirk.shoop@gmail.com>
   - name: Lee Howes
     email: <lwh@fb.com>
+  - name: Lucian Radu Teodorescu
+    email: <lucteo@lucteo.ro>
 toc: true
 ---
 
