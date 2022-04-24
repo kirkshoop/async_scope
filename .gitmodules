@@ -1,3 +1,6 @@
 [submodule "wg21"]
 	path = wg21
 	url = https://github.com/mpark/wg21.git
+[submodule "external/p2300"]
+	path = external/p2300
+	url = https://github.com/brycelelbach/wg21_p2300_std_execution.git
