@@ -44,11 +44,9 @@ int main() {
            "spawn void\n"
            "==========\n");
 
-    // TODO
-    // scope.spawn(printVoid);                                                 // 5
+    scope.spawn(std::move(printVoid)); // 5
 
-    // TODO
-    // sync_wait(printEmpty);
+    sync_wait(std::move(printEmpty));
 
     printf("\n"
            "spawn void and 42\n"
@@ -56,18 +54,15 @@ int main() {
 
     sender auto fortyTwo = then(begin, []() noexcept { return 42; }); // 6
 
-    // TODO
-    // scope.spawn(printVoid);                                                 // 7
+    scope.spawn(std::move(printVoid)); // 7
 
-    // TODO
-    // sender auto fortyTwoFuture = scope.spawn_future(fortyTwo);              // 8
-    //
-    // sender auto printFortyTwo = then(std::move(fortyTwoFuture),
-    //   [](int fortyTwo)noexcept{ printf("%d\n", fortyTwo); });               // 9
-    //
-    // sender auto allDone = then(
-    //   when_all(printEmpty, std::move(printFortyTwo)),
-    //   [](auto&&...)noexcept{printf("\nall done\n");});                      // 10
-    //
-    // sync_wait(std::move(allDone));
+    sender auto fortyTwoFuture = scope.spawn_future(std::move(fortyTwo)); // 8
+
+    sender auto printFortyTwo = then(std::move(fortyTwoFuture),
+            [](int fortyTwo) noexcept { printf("%d\n", fortyTwo); }); // 9
+
+    sender auto allDone = then(when_all(printEmpty, std::move(printFortyTwo)),
+            [](auto&&...) noexcept { printf("\nall done\n"); }); // 10
+
+    sync_wait(std::move(allDone));
 }
