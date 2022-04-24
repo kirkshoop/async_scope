@@ -94,3 +94,11 @@ target_link_libraries(test.async_scope CONAN_PKG::catch2)
 include(CTest)
 include(Catch)
 catch_discover_tests(test.async_scope)
+
+# Set up examples
+function(def_example target sourceFile)
+    add_executable(${target} ${sourceFile})
+    target_link_libraries(${target} async_scope)
+endfunction()
+
+def_example(example.scope "examples/scope.cpp")
