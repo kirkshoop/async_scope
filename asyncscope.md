@@ -409,7 +409,7 @@ It is safe to drop the sender returned from `spawn_future()` without starting it
 Please note that there is a race between the completion of the given sender and the start of the returned sender.
 The race will be resolved by the `@_spawn-future-sender_@<>` state.
 
-Cancelling the returned sender, cancels `s` but does not cancel the `async_scope`, but the cancellation would be propagated to the given sender.
+Cancelling the returned sender, cancels `s` but does not cancel the `async_scope`.
 
 Usage example:
 ```c++
