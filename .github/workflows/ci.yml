@@ -53,7 +53,7 @@ jobs:
       - uses: docker://lucteo/action-cxx-toolkit.main:latest
         with:
           checks: clang-format
-          clangformatdirs: src test
+          clangformatdirs: include test
   sanitizer:
     runs-on: ubuntu-latest
     steps:
