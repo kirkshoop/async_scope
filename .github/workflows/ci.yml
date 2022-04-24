@@ -62,4 +62,5 @@ jobs:
           submodules: 'true'
       - uses: docker://lucteo/action-cxx-toolkit.main:latest
         with:
+          cc: clang-13
           checks: sanitize=address sanitize=undefined
