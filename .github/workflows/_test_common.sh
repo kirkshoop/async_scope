@@ -7,7 +7,7 @@ _CURDIR=$(_realpath $(dirname "$0"))
 ROOTDIR="${_CURDIR}/../../"
 
 # Export the general params that need to be added do 'docker run'
-DOCKER_RUN_PARAMS="--rm -it --workdir /github/workspace -v ${ROOTDIR}:/github/workspace"
+DOCKER_RUN_PARAMS="--rm --workdir /github/workspace -v ${ROOTDIR}:/github/workspace"
 
 RED="\033[0;31m"
 GREEN="\033[0;32m"
