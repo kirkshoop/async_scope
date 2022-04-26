@@ -234,6 +234,9 @@ template <typename _Sender>
 using _future_operation_t = connect_result_t<_Sender, future_receiver<_Sender>>;
 
 void record_done(async_scope*) noexcept;
+// For testing purposes
+[[nodiscard]] bool empty(const async_scope& scope) noexcept;
+[[nodiscard]] std::size_t op_count(const async_scope& scope) noexcept;
 
 template <typename Sender>
 struct __receiver<Sender>::type final : private receiver_adaptor<receiver<Sender>>, _receiver_base {
@@ -575,6 +578,14 @@ private:
     static bool is_stopping(std::size_t state) noexcept { return (state & stoppedBit) == 0; }
 
     static std::size_t op_count(std::size_t state) noexcept { return state >> 1; }
+
+    // For testing purposes
+    [[nodiscard]] friend bool empty(const async_scope& scope) noexcept {
+        return async_scope::op_count(scope.opState_) == 0;
+    }
+    [[nodiscard]] friend std::size_t op_count(const async_scope& scope) noexcept {
+        return async_scope::op_count(scope.opState_);
+    }
 
     [[nodiscard]] bool try_record_start() noexcept {
         auto opState = opState_.load(std::memory_order_relaxed);
