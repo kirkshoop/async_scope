@@ -558,7 +558,7 @@ public:
         return __future<std::remove_cvref_t<_Sender>>{nullptr};
     }
 
-    [[nodiscard]] auto empty() const noexcept { return await_and_sync(); }
+    [[nodiscard]] auto on_empty() const noexcept { return await_and_sync(); }
 
     in_place_stop_source& get_stop_source() noexcept { return stopSource_; }
 
