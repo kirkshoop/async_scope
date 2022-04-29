@@ -307,7 +307,7 @@ The requirements for the async scope are:
  - An `async_scope` must allow an arbitrary sender to be nested within the scope without eagerly starting the sender (`nest()`).
  - An `async_scope` must constrain `spawn()` to accept only senders that complete with `void`.
  - An `async_scope` must provide an `@_on-empty-sender_@` that completes when all spawned senders are complete.
- - An `async_scope` must must start the given sender before `spawn()` and `spawn_future()` exit.
+ - An `async_scope` must start the given sender before `spawn()` and `spawn_future()` exit.
 
 More on these items can be found below in the sections below.
 
@@ -401,7 +401,7 @@ This involves an allocation for the `@_operation-state_@` of the sender, until i
 This is similar to `ensure_started()` from [@P2300R4].
 The addition of `async_scope::spawn_future()` would allow us to remove `ensure_started()` from [@P2300R4].   
 
-Unlike `spawn()`, The sender given to `spawn_future()` is not constrained on a given shape.
+Unlike `spawn()`, the sender given to `spawn_future()` is not constrained on a given shape.
 It may send different types of values, and it can complete with errors.  
 
 It is safe to drop the sender returned from `spawn_future()` without starting it, because the `async_scope` safely manages the lifetime of the running operations.
