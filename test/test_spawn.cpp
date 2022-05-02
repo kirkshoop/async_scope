@@ -51,6 +51,7 @@ TEST_CASE("spawn will start sender before returning", "[spawn]") {
     REQUIRE(executed.load());
 }
 
+#if !NO_TESTS_WITH_EXCEPTIONS
 TEST_CASE("spawn will propagate exceptions encountered during op creation", "[spawn]") {
     ex::async_scope scope;
     try {
@@ -62,6 +63,7 @@ TEST_CASE("spawn will propagate exceptions encountered during op creation", "[sp
         FAIL("invalid exception caught");
     }
 }
+#endif
 
 TEST_CASE("spawn will keep the scope non-empty until the work is executed", "[spawn]") {
     impulse_scheduler sch;
