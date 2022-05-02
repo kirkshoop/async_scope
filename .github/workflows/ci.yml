@@ -63,4 +63,5 @@ jobs:
       - uses: docker://lucteo/action-cxx-toolkit.main:latest
         with:
           cc: clang-13
+          cxxflags: NO_TESTS_WITH_EXCEPTIONS=1
           checks: sanitize=address sanitize=undefined

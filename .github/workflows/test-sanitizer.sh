@@ -18,6 +18,7 @@ docker run ${DOCKER_RUN_PARAMS} \
     -e INPUT_PREBUILD_COMMAND="conan config set storage.path=/github/workspace/${BUILDDIR}/.conan" \
     -e INPUT_CC='clang-13' \
     -e INPUT_MAKEFLAGS='-j 4' \
+    -e INPUT_CXXFLAGS='-DNO_TESTS_WITH_EXCEPTIONS=1' \
     -e INPUT_CHECKS='sanitize=address sanitize=undefined' \
     lucteo/action-cxx-toolkit.main:latest
 status=$?
