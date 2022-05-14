@@ -1,6 +1,5 @@
 #include <catch2/catch.hpp>
 #include <async_scope.hpp>
-#include "./schedulers/static_thread_pool.hpp"
 #include "test_common/schedulers.hpp"
 #include "test_common/receivers.hpp"
 
