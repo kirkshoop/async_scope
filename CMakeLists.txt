@@ -83,6 +83,7 @@ set(test_sourceFiles
     test/test_main.cpp
     test/test_dtor.cpp
     test/test_spawn.cpp
+    test/test_spawn_future.cpp
     )
 
 add_executable(test.async_scope ${test_sourceFiles})

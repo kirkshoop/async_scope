@@ -30,25 +30,25 @@ struct throwing_sender {
 
 TEST_CASE("spawn will execute its work", "[spawn]") {
     impulse_scheduler sch;
-    std::atomic<bool> executed{false};
+    bool executed{false};
     ex::async_scope scope;
 
     // Non-blocking call
     scope.spawn(ex::on(sch, ex::just() | ex::then([&] { executed = true; })));
-    REQUIRE_FALSE(executed.load());
+    REQUIRE_FALSE(executed);
     // Run the operation on the scheduler
     sch.start_next();
     // Now the spawn work should be completed
-    REQUIRE(executed.load());
+    REQUIRE(executed);
 }
 
 TEST_CASE("spawn will start sender before returning", "[spawn]") {
-    std::atomic<bool> executed{false};
+    bool executed{false};
     ex::async_scope scope;
 
     // This will be a blocking call
     scope.spawn(ex::just() | ex::then([&] { executed = true; }));
-    REQUIRE(executed.load());
+    REQUIRE(executed);
 }
 
 #if !NO_TESTS_WITH_EXCEPTIONS
