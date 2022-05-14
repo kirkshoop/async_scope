@@ -85,6 +85,7 @@ set(test_sourceFiles
     test/test_spawn.cpp
     test/test_spawn_future.cpp
     test/test_on_empty.cpp
+    test/test_stop.cpp
     )
 
 add_executable(test.async_scope ${test_sourceFiles})
