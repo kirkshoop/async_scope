@@ -36,6 +36,8 @@ This paper describes an object that would be used to create a scope that will co
 
 This object would be used to spawn senders without waiting for each sender to complete.
 
+## Implementation experience
+
 The general concept of an async scope to manage work has been deployed broadly in [folly](https://github.com/facebook/folly/blob/main/folly/experimental/coro/AsyncScope.h) to safely launch awaitables in folly's [coroutine library](https://github.com/facebook/folly/tree/main/folly/experimental/coro) and in [libunifex](https://github.com/facebookexperimental/libunifex/blob/main/include/unifex/async_scope.hpp) where it is designed to be used with the sender/receiver pattern.
 
 Motivation
@@ -362,7 +364,7 @@ Please see [Q & A](#q-a) section for more details on reasons why calling `termin
 ## `spawn`
 
 ```c++
-template <sender S> void spawn(S&& s);
+template <sender_to<@_spawn-receiver_@> S> void spawn(S&& s);
 ```
 
 Eagerly launches work on the `async_scope`.
@@ -766,19 +768,10 @@ As `spawn()` works similar to `start_detached` from [@P2300R4], which is a sende
 On the other hand, `spawn_future()` is not a sender consumer, thus we might have considered adding pipe operator to it.
 To keep consistency with `spawn()`, at this point the paper doesn't support pipe operator for `spawn_future()`.
 
-##  Use of customization point objects
-Unlike [@P2300R4], this paper does not propose any use of customization point objects.
-While `start_detached` is a customization point object, its correspondent, `async_scope::spawn` is not.
-
-At this point, we do not believe that customizing the operations of `async_scope` will be needed by the users.
-Therefore, the paper does not propose any customization point objects.
-
 Q & A
 =====
 
 ## Why does `async_scope` terminate in the destructor instead of blocking like `jthread`?
-
-One author's perspective:
 
 - `jthread` blocking in the destructor is bad for composition.
 - `jthread` and `thread` should `terminate()` if the destructor runs before the thread exits. 
@@ -804,8 +797,6 @@ Principles that lead to avoid blocking in the destructor:
 - Every asynchronous lifetime must be managed with non-blocking primitives and only `sync_wait()` is used to block.
 
 ## Why doesn't the `async_scope` destructor stop all the nested and spawned senders?
-
-One author's perspective:
 
 - `stop_callback` is not a destructor because:
   - `request_stop()` is **asking** for early completion.
@@ -970,7 +961,6 @@ struct async_scope {
    - If no exception is thrown while creating `op` and stop was not requested on our stop source, then:
      - `start(op)` is called (before `spawn()` returns).
      - The lifetime of `op` extends at least until `recv` is called with a completion notification.
-     - If the given work calls `set_error()` on `recv` then `std::terminate()` will be called.
    - `recv` supports the `get_stop_token()` query customization point object; this will return the stop token associated with `async_scope` object.
 3. *Note*: the receiver will help the `async_scope` object to keep track of how many operations are running at a given time. 
 
