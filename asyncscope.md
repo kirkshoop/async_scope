@@ -550,7 +550,7 @@ int main() {
         // and wait for ongoing work to complete
         | let_value([&]{
             scope.request_stop();
-            return scope.one_empty();
+            return scope.on_empty();
         })
         ;
     this_thread::sync_wait(program_with_termination);
