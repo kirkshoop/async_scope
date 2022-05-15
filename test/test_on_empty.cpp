@@ -26,14 +26,13 @@ TEST_CASE("TODO: on_empty sender can properly connect a void receiver", "[on_emp
     scope.spawn(ex::just());
 
     ex::sender auto snd = scope.on_empty() | ex::then([&] { is_empty = true; });
-    // TODO: this doesn't compile
-    // auto op = ex::connect(std::move(snd), expect_void_receiver{});
-    // ex::start(op);
-    // REQUIRE(is_empty);
+    auto op = ex::connect(std::move(snd), expect_void_receiver{});
+    ex::start(op);
+    REQUIRE(is_empty);
     (void)snd;
 }
 
-TEST_CASE("TODO: on_empty will complete after the work is done", "[on_empty]") {
+TEST_CASE("on_empty will complete after the work is done", "[on_empty]") {
     impulse_scheduler sch;
     ex::async_scope scope;
 
@@ -42,20 +41,17 @@ TEST_CASE("TODO: on_empty will complete after the work is done", "[on_empty]") {
 
     // The on_empty() sender cannot notify now
     bool is_empty{false};
-    ex::sender auto snd = ex::on(sch, scope.on_empty()) | ex::then([&] { is_empty = true; });
+    ex::sender auto snd = scope.on_empty() | ex::then([&] { is_empty = true; });
     auto op = ex::connect(std::move(snd), expect_void_receiver{});
     ex::start(op);
     REQUIRE_FALSE(is_empty);
 
-    // TODO: refactor this test
-    sch.start_next();
-    sch.start_next();
     sch.start_next();
     // We should be notified now
     REQUIRE(is_empty);
 }
 
-TEST_CASE("TODO: on_empty can be used multiple times", "[on_empty]") {
+TEST_CASE("on_empty can be used multiple times", "[on_empty]") {
     impulse_scheduler sch;
     ex::async_scope scope;
 
@@ -64,14 +60,11 @@ TEST_CASE("TODO: on_empty can be used multiple times", "[on_empty]") {
 
     // The on_empty() sender cannot notify now
     bool is_empty{false};
-    ex::sender auto snd = ex::on(sch, scope.on_empty()) | ex::then([&] { is_empty = true; });
+    ex::sender auto snd = scope.on_empty() | ex::then([&] { is_empty = true; });
     auto op = ex::connect(std::move(snd), expect_void_receiver{});
     ex::start(op);
     REQUIRE_FALSE(is_empty);
 
-    // TODO: refactor this test
-    sch.start_next();
-    sch.start_next();
     sch.start_next();
     // We should be notified now
     REQUIRE(is_empty);
@@ -81,14 +74,11 @@ TEST_CASE("TODO: on_empty can be used multiple times", "[on_empty]") {
 
     // The on_empty() sender cannot notify now
     bool is_empty2{false};
-    ex::sender auto snd2 = ex::on(sch, scope.on_empty()) | ex::then([&] { is_empty2 = true; });
+    ex::sender auto snd2 = scope.on_empty() | ex::then([&] { is_empty2 = true; });
     auto op2 = ex::connect(std::move(snd2), expect_void_receiver{});
     ex::start(op2);
     REQUIRE_FALSE(is_empty2);
 
-    // TODO: refactor this test
-    sch.start_next();
-    sch.start_next();
     sch.start_next();
     // We should be notified now
     REQUIRE(is_empty2);
@@ -114,8 +104,7 @@ TEST_CASE("waiting on work that spawns more work", "[on_empty]") {
 
     // start an on_empty() sender
     bool is_empty{false};
-    ex::sender auto snd = ex::on(inline_scheduler{}, scope.on_empty()) //
-                          | ex::then([&] { is_empty = true; });
+    ex::sender auto snd = scope.on_empty() | ex::then([&] { is_empty = true; });
     auto op = ex::connect(std::move(snd), expect_void_receiver{});
     ex::start(op);
     REQUIRE_FALSE(work1_done);
@@ -136,7 +125,6 @@ TEST_CASE("waiting on work that spawns more work", "[on_empty]") {
     REQUIRE(work2_done);
     REQUIRE(is_empty);
 }
-// TODO: async_scope is empty after adding work when in cancelled state
 TEST_CASE("async_scope is empty after adding work when in cancelled state", "[on_empty]") {
     impulse_scheduler sch;
     ex::async_scope scope;
@@ -145,8 +133,7 @@ TEST_CASE("async_scope is empty after adding work when in cancelled state", "[on
     scope.spawn(ex::just());
 
     bool is_empty1{false};
-    ex::sender auto snd = ex::on(inline_scheduler{}, scope.on_empty()) //
-                          | ex::then([&] { is_empty1 = true; });
+    ex::sender auto snd = scope.on_empty() | ex::then([&] { is_empty1 = true; });
     auto op = ex::connect(std::move(snd), expect_void_receiver{});
     ex::start(op);
     REQUIRE(is_empty1);
@@ -158,8 +145,7 @@ TEST_CASE("async_scope is empty after adding work when in cancelled state", "[on
     // note that we don't tell impulse sender to start the work
 
     bool is_empty2{false};
-    ex::sender auto snd2 = ex::on(inline_scheduler{}, scope.on_empty()) //
-                           | ex::then([&] { is_empty2 = true; });
+    ex::sender auto snd2 = scope.on_empty() | ex::then([&] { is_empty2 = true; });
     auto op2 = ex::connect(std::move(snd2), expect_void_receiver{});
     ex::start(op2);
     REQUIRE(is_empty2);

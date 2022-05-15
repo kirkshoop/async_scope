@@ -4,203 +4,184 @@
 
 namespace std::execution {
 
-template <class _SchedulerProvider>
-concept __scheduler_provider = requires(const _SchedulerProvider& __sp) {
-    { get_scheduler(__sp) } -> scheduler<>;
-};
-
 namespace __event {
 
-    struct _op_base;
+struct _op_base;
 
-    template <typename Receiver>
-    struct _operation {
-        struct type;
-    };
+template <typename Receiver>
+struct _operation {
+    struct type;
+};
 
-    template <typename Receiver>
-    using operation = typename _operation<Receiver>::type;
+template <typename Receiver>
+using operation = typename _operation<Receiver>::type;
 
-    struct async_manual_reset_event;
+struct async_manual_reset_event;
 
-    struct __sender {
+// Sender type that is triggered when the async_object becomes empty
+// The async_scope::on_empty() method returns a wrapped version of this
+struct __sender {
 
-        explicit __sender(const async_manual_reset_event& evt) noexcept
-            : evt_(&evt) {}
+    explicit __sender(const async_manual_reset_event& evt) noexcept
+        : evt_(&evt) {}
 
-        template <__decays_to<__sender> _Self, receiver _Receiver>
-        requires environment_provider<_Receiver> &&
-                receiver_of<_Receiver, completion_signatures_of_t<_Self, env_of_t<_Receiver>>> &&
-                __scheduler_provider<env_of_t<_Receiver>>
-        friend auto tag_invoke(connect_t, _Self&& __self, _Receiver&& __rcvr)
-                -> operation<remove_cvref_t<_Receiver>> {
-            return operation<remove_cvref_t<_Receiver>>{*__self.evt_, (_Receiver &&) __rcvr};
-        }
-
-        template <__decays_to<__sender> _Self, class _Env>
-        friend auto tag_invoke(get_completion_signatures_t, _Self&&, _Env)
-                -> std::execution::completion_signatures<std::execution::set_value_t(),
-                        std::execution::set_error_t(std::exception_ptr)>;
-
-    private:
-        const async_manual_reset_event* evt_;
-    };
-
-    struct async_manual_reset_event {
-        async_manual_reset_event() noexcept
-            : async_manual_reset_event(false) {}
-
-        explicit async_manual_reset_event(bool startSignalled) noexcept
-            : state_(startSignalled ? this : nullptr) {}
-
-        void set() noexcept;
-
-        bool ready() const noexcept {
-            return state_.load(std::memory_order_acquire) == static_cast<const void*>(this);
-        }
-
-        void reset() noexcept {
-            // transition from signalled (i.e. state_ == this) to not-signalled
-            // (i.e. state_ == nullptr).
-            void* oldState = this;
-
-            // We can ignore the the result.  We're using _strong so it won't fail
-            // spuriously; if it fails, it means it wasn't previously in the signalled
-            // state so resetting is a no-op.
-            (void)state_.compare_exchange_strong(oldState, nullptr, std::memory_order_acq_rel);
-        }
-
-        [[nodiscard]] __sender async_wait() const noexcept { return __sender{*this}; }
-
-    private:
-        std::atomic<void*> state_{};
-
-        friend struct _op_base;
-
-        // note: this is a static method that takes evt *second* because the caller
-        //       a member function on _op_base and so will already have op in first
-        //       argument position; making this function a member would require some
-        //       register-juggling code, which would increase binary size
-        static void start_or_wait(_op_base& op, const async_manual_reset_event& evt) noexcept;
-    };
-
-    struct _op_base {
-        // note: next_ is intentionally left indeterminate until the operation is
-        //       pushed on the event's stack of waiting operations
-        //
-        // note: next_ and setValue_ are the first two members because this ordering
-        //       leads to smaller code than others; on ARM, the first two members can
-        //       be loaded into a pair of registers in one instruction, which turns
-        //       out to be important in both async_manual_reset_event::set() and
-        //       start_or_wait().
-        _op_base* next_;
-        void (*setValue_)(_op_base*) noexcept;
-        const async_manual_reset_event* evt_;
-
-        explicit _op_base(
-                const async_manual_reset_event& evt, void (*setValue)(_op_base*) noexcept) noexcept
-            : setValue_(setValue)
-            , evt_(&evt) {}
-
-        ~_op_base() = default;
-
-        _op_base(_op_base&&) = delete;
-        _op_base& operator=(_op_base&&) = delete;
-
-        void set_value() noexcept { setValue_(this); }
-
-        void start() noexcept { async_manual_reset_event::start_or_wait(*this, *evt_); }
-    };
-
-    template <class _Receiver>
-    class __receiver : private receiver_adaptor<__receiver<_Receiver>, _Receiver> {
-        friend receiver_adaptor<__receiver<_Receiver>, _Receiver>;
-
-        auto
-        get_env() const& -> make_env_t<get_stop_token_t, never_stop_token, env_of_t<_Receiver>> {
-            return make_env<get_stop_token_t>(never_stop_token{}, execution::get_env(this->base()));
-        }
-
-    public:
-        using receiver_adaptor<__receiver, _Receiver>::receiver_adaptor;
-    };
-
-    template <typename Receiver>
-    auto connect_as_unstoppable(Receiver && r) noexcept(
-            __has_nothrow_connect<decltype(schedule(get_scheduler(get_env(r))), get_stop_token,
-                                          never_stop_token{}),
-                    __receiver<Receiver>>) {
-        return connect(schedule(get_scheduler(get_env(r))), __receiver<Receiver>{std::move(r)});
+    template <__decays_to<__sender> _Self, receiver _Receiver>
+    requires environment_provider<_Receiver> &&
+            receiver_of<_Receiver, completion_signatures_of_t<_Self, env_of_t<_Receiver>>>
+    friend auto tag_invoke(connect_t, _Self&& __self, _Receiver&& __rcvr)
+            -> operation<remove_cvref_t<_Receiver>> {
+        return operation<remove_cvref_t<_Receiver>>{*__self.evt_, (_Receiver &&) __rcvr};
     }
 
-    template <typename Receiver>
-    struct _operation<Receiver>::type : private _op_base {
-        explicit type(const async_manual_reset_event& evt, Receiver r) noexcept(
-                noexcept(connect_as_unstoppable(std::move(r))))
-            : _op_base(evt, &set_value_impl)
-            , op_(connect_as_unstoppable(std::move(r))) {}
+    template <__decays_to<__sender> _Self, class _Env>
+    friend auto tag_invoke(get_completion_signatures_t, _Self&&, _Env)
+            -> std::execution::completion_signatures<std::execution::set_value_t()>;
 
-        ~type() = default;
+private:
+    const async_manual_reset_event* evt_;
+};
 
-        type(type&&) = delete;
-        type& operator=(type&&) = delete;
+// Event object that is triggered when the async_scope is empty; set() will be called when
+// async_scope becomes empty. If there are `on_empty()` senders registered, this will trigger
+// them.
+struct async_manual_reset_event {
+    async_manual_reset_event() noexcept
+        : async_manual_reset_event(false) {}
 
-    private:
-        friend void tag_invoke(start_t, type& self) noexcept { self.start(); }
+    explicit async_manual_reset_event(bool startSignalled) noexcept
+        : state_(startSignalled ? this : nullptr) {}
 
-        [[no_unique_address]] decltype(connect_as_unstoppable(std::declval<Receiver>())) op_;
+    // Called when the async_scope reaches "empty" state
+    void set() noexcept;
 
-        static void set_value_impl(_op_base* base) noexcept {
-            auto self = static_cast<type*>(base);
-            std::execution::start(self->op_);
-        }
-    };
+    // Called when the async_scope object is not empty anymore
+    void reset() noexcept {
+        // transition from signalled (i.e. state_ == this) to not-signalled
+        // (i.e. state_ == nullptr).
+        void* oldState = this;
 
-    inline void async_manual_reset_event::set() noexcept {
-        void* const signalledState = this;
+        // We can ignore the the result.  We're using _strong so it won't fail
+        // spuriously; if it fails, it means it wasn't previously in the signalled
+        // state so resetting is a no-op.
+        (void)state_.compare_exchange_strong(oldState, nullptr, std::memory_order_acq_rel);
+    }
 
-        // replace the stack of waiting operations with a sentinel indicating we've
-        // been signalled
-        void* top = state_.exchange(signalledState, std::memory_order_acq_rel);
+    // Returns a sender that is triggered when the async_scope becomes empty
+    [[nodiscard]] __sender async_wait() const noexcept { return __sender{*this}; }
 
+private:
+    std::atomic<void*> state_{};
+
+    friend struct _op_base;
+
+    // note: this is a static method that takes evt *second* because the caller
+    //       a member function on _op_base and so will already have op in first
+    //       argument position; making this function a member would require some
+    //       register-juggling code, which would increase binary size
+    static void start_or_wait(_op_base& op, const async_manual_reset_event& evt) noexcept;
+};
+
+// Base class for an operation connecting a sender indicating the emptiness of async_scope and
+// the receiver passed to async_scope::on_empty().
+// This implements a type-erased operation. Derived classes will know about actual receiver
+// types.
+// We keep here in an intrinsic linked list the senders waiting for the emptiness of the
+// asyc_scope object.
+struct _op_base {
+    // note: next_ is intentionally left indeterminate until the operation is
+    //       pushed on the event's stack of waiting operations
+    //
+    // note: next_ and setValue_ are the first two members because this ordering
+    //       leads to smaller code than others; on ARM, the first two members can
+    //       be loaded into a pair of registers in one instruction, which turns
+    //       out to be important in both async_manual_reset_event::set() and
+    //       start_or_wait().
+    _op_base* next_;
+    void (*setValue_)(_op_base*) noexcept;
+    const async_manual_reset_event* evt_;
+
+    explicit _op_base(
+            const async_manual_reset_event& evt, void (*setValue)(_op_base*) noexcept) noexcept
+        : setValue_(setValue)
+        , evt_(&evt) {}
+
+    ~_op_base() = default;
+
+    _op_base(_op_base&&) = delete;
+    _op_base& operator=(_op_base&&) = delete;
+
+    void set_value() noexcept { setValue_(this); }
+
+    void start() noexcept { async_manual_reset_event::start_or_wait(*this, *evt_); }
+};
+
+// Final operation connecting __sender and the receiver to be notified about async_scope emptiness
+template <typename Receiver>
+struct _operation<Receiver>::type : private _op_base {
+    explicit type(const async_manual_reset_event& evt, Receiver r) noexcept
+        : _op_base(evt, &set_value_impl)
+        , recv_(std::move(r)) {}
+
+    ~type() = default;
+
+    type(type&&) = delete;
+    type& operator=(type&&) = delete;
+
+private:
+    friend void tag_invoke(start_t, type& self) noexcept { self.start(); }
+
+    [[no_unique_address]] Receiver recv_;
+
+    // Called when the async_object is empty
+    static void set_value_impl(_op_base* base) noexcept {
+        auto self = static_cast<type*>(base);
+        std::execution::set_value(std::move(self->recv_));
+    }
+};
+
+inline void async_manual_reset_event::set() noexcept {
+    void* const signalledState = this;
+
+    // replace the stack of waiting operations with a sentinel indicating we've
+    // been signalled
+    void* top = state_.exchange(signalledState, std::memory_order_acq_rel);
+
+    if (top == signalledState) {
+        // we were already signalled so there are no waiting operations
+        return;
+    }
+
+    // We are the first thread to set the state to signalled; iteratively pop
+    // the stack and complete each operation.
+    auto op = static_cast<_op_base*>(top);
+    while (op != nullptr) {
+        std::exchange(op, op->next_)->set_value();
+    }
+}
+
+inline void async_manual_reset_event::start_or_wait(
+        _op_base& op, const async_manual_reset_event& evt) noexcept {
+    async_manual_reset_event& e = const_cast<async_manual_reset_event&>(evt);
+    // Try to push op onto the stack of waiting ops.
+    void* const signalledState = &e;
+
+    void* top = e.state_.load(std::memory_order_acquire);
+
+    do {
         if (top == signalledState) {
-            // we were already signalled so there are no waiting operations
+            // Already in the signalled state; don't push it.
+            op.set_value();
             return;
         }
 
-        // We are the first thread to set the state to signalled; iteratively pop
-        // the stack and complete each operation.
-        auto op = static_cast<_op_base*>(top);
-        while (op != nullptr) {
-            std::exchange(op, op->next_)->set_value();
-        }
-    }
-
-    inline void async_manual_reset_event::start_or_wait(
-            _op_base & op, const async_manual_reset_event& evt) noexcept {
-        async_manual_reset_event& e = const_cast<async_manual_reset_event&>(evt);
-        // Try to push op onto the stack of waiting ops.
-        void* const signalledState = &e;
-
-        void* top = e.state_.load(std::memory_order_acquire);
-
-        do {
-            if (top == signalledState) {
-                // Already in the signalled state; don't push it.
-                op.set_value();
-                return;
-            }
-
-            // note: on the first iteration, this line transitions op.next_ from
-            //       indeterminate to a well-defined value
-            op.next_ = static_cast<_op_base*>(top);
-        } while (!e.state_.compare_exchange_weak(top, static_cast<void*>(&op),
-                std::memory_order_release, std::memory_order_acquire));
-    }
+        // note: on the first iteration, this line transitions op.next_ from
+        //       indeterminate to a well-defined value
+        op.next_ = static_cast<_op_base*>(top);
+    } while (!e.state_.compare_exchange_weak(
+            top, static_cast<void*>(&op), std::memory_order_release, std::memory_order_acquire));
+}
 
 } // namespace __event
-
-using __event::async_manual_reset_event;
 
 namespace __scope {
 
@@ -480,7 +461,7 @@ private:
     // (opState_ & 1) is 1 until we've been stopped
     // (opState_ >> 1) is the number of outstanding operations
     std::atomic<std::size_t> opState_{1};
-    async_manual_reset_event evt_;
+    __event::async_manual_reset_event evt_;
 
     [[nodiscard]] auto await_and_sync() const noexcept {
         return then(evt_.async_wait(), [this]() noexcept {
