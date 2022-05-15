@@ -46,7 +46,11 @@ private:
 // them.
 struct async_manual_reset_event {
     async_manual_reset_event() noexcept
-        : async_manual_reset_event(false) {}
+        : async_manual_reset_event(false) {
+        // Start in the signaled state
+        void* const signalledState = this;
+        state_.store(signalledState, std::memory_order_relaxed);
+    }
 
     explicit async_manual_reset_event(bool startSignalled) noexcept
         : state_(startSignalled ? this : nullptr) {}

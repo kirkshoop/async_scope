@@ -6,24 +6,18 @@
 namespace ex = std::execution;
 using std::this_thread::sync_wait;
 
-TEST_CASE("TODO: on_empty will complete immediately on an empty async_scope", "[on_empty]") {
+TEST_CASE("on_empty will complete immediately on an empty async_scope", "[on_empty]") {
     ex::async_scope scope;
     bool is_empty{false};
-
-    // TODO: removing this will stop the test from working
-    scope.spawn(ex::just());
 
     ex::sender auto snd = scope.on_empty() | ex::then([&] { is_empty = true; });
     sync_wait(std::move(snd));
     REQUIRE(is_empty);
 }
 
-TEST_CASE("TODO: on_empty sender can properly connect a void receiver", "[on_empty]") {
+TEST_CASE("on_empty sender can properly connect a void receiver", "[on_empty]") {
     ex::async_scope scope;
     bool is_empty{false};
-
-    // TODO: removing this will stop the test from working
-    scope.spawn(ex::just());
 
     ex::sender auto snd = scope.on_empty() | ex::then([&] { is_empty = true; });
     auto op = ex::connect(std::move(snd), expect_void_receiver{});
@@ -128,9 +122,6 @@ TEST_CASE("waiting on work that spawns more work", "[on_empty]") {
 TEST_CASE("async_scope is empty after adding work when in cancelled state", "[on_empty]") {
     impulse_scheduler sch;
     ex::async_scope scope;
-
-    // TODO: removing this will stop the test from working
-    scope.spawn(ex::just());
 
     bool is_empty1{false};
     ex::sender auto snd = scope.on_empty() | ex::then([&] { is_empty1 = true; });
