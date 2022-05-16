@@ -454,7 +454,10 @@ code.sourceCode > span { display: inline; }
 <ul>
 <li><a href="#r0"><span class="toc-section-number">1.1</span> R0<span></span></a></li>
 </ul></li>
-<li><a href="#introduction"><span class="toc-section-number">2</span> Introduction<span></span></a></li>
+<li><a href="#introduction"><span class="toc-section-number">2</span> Introduction<span></span></a>
+<ul>
+<li><a href="#implementation-experience"><span class="toc-section-number">2.1</span> Implementation experience<span></span></a></li>
+</ul></li>
 <li><a href="#motivation"><span class="toc-section-number">3</span> Motivation<span></span></a>
 <ul>
 <li><a href="#motivating-example"><span class="toc-section-number">3.1</span> Motivating example<span></span></a></li>
@@ -503,7 +506,6 @@ code.sourceCode > span { display: inline; }
 <li><a href="#uses-in-other-concurrent-abstractions"><span class="toc-section-number">6.4</span> Uses in other concurrent abstractions<span></span></a></li>
 <li><a href="#removal-of-p2300s-start_detached"><span class="toc-section-number">6.5</span> Removal of P2300’s <code class="sourceCode default">start_detached</code><span></span></a></li>
 <li><a href="#supporting-pipe-operator"><span class="toc-section-number">6.6</span> Supporting pipe operator<span></span></a></li>
-<li><a href="#use-of-customization-point-objects"><span class="toc-section-number">6.7</span> Use of customization point objects<span></span></a></li>
 </ul></li>
 <li><a href="#q-a"><span class="toc-section-number">7</span> Q &amp; A<span></span></a>
 <ul>
@@ -549,6 +551,7 @@ code.sourceCode > span { display: inline; }
 <li>offers a join operation that may be used to continue more work, or block and wait for work, after some set of senders is complete, independent of the context on which they run.</li>
 </ul>
 <p>This object would be used to spawn senders without waiting for each sender to complete.</p>
+<h2 data-number="2.1" id="implementation-experience"><span class="header-section-number">2.1</span> Implementation experience<a href="#implementation-experience" class="self-link"></a></h2>
 <p>The general concept of an async scope to manage work has been deployed broadly in <a href="https://github.com/facebook/folly/blob/main/folly/experimental/coro/AsyncScope.h">folly</a> to safely launch awaitables in folly’s <a href="https://github.com/facebook/folly/tree/main/folly/experimental/coro">coroutine library</a> and in <a href="https://github.com/facebookexperimental/libunifex/blob/main/include/unifex/async_scope.hpp">libunifex</a> where it is designed to be used with the sender/receiver pattern.</p>
 <h1 data-number="3" id="motivation"><span class="header-section-number">3</span> Motivation<a href="#motivation" class="self-link"></a></h1>
 <h2 data-number="3.1" id="motivating-example"><span class="header-section-number">3.1</span> Motivating example<a href="#motivating-example" class="self-link"></a></h2>
@@ -772,7 +775,7 @@ code.sourceCode > span { display: inline; }
 <p>Please note that there is a race between the completion of the sender returned by <code class="sourceCode default">on_empty()</code> and adding new work to the <code class="sourceCode default">async_scope</code> object. If new work is added from a work that is already in the scope, then the implementation guarantees that there is no race. If, however, new work is added from a different source, the implementation cannot prevent the race. For example, one can imagine that the new work is added just after the <code class="sourceCode default">on_empty()</code> sender completes.</p>
 <p>Please see <a href="#q-a">Q &amp; A</a> section for more details on reasons why calling <code class="sourceCode default">terminate()</code> is preferred to implicit waiting.</p>
 <h2 data-number="5.3" id="spawn"><span class="header-section-number">5.3</span> <code class="sourceCode default">spawn</code><a href="#spawn" class="self-link"></a></h2>
-<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span> <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
 <p>Eagerly launches work on the <code class="sourceCode default">async_scope</code>. This involves an allocation for the <code class="sourceCode default"><em>operation-state</em></code> of the sender until it completes.</p>
 <p>This is similar to <code class="sourceCode default">start_detached()</code> from <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>, but we keep track of the lifetime of the given work. The addition of <code class="sourceCode default">async_scope::spawn()</code> would allow us to remove <code class="sourceCode default">start_detached()</code> from <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>.</p>
 <p>The given sender must complete with <code class="sourceCode default">void</code> or be stopped. The given sender is not allowed to complete with an error; the user must explicitly handle the errors that might appear before passing the corresponding sender to <code class="sourceCode default">spawn</code>.</p>
@@ -864,7 +867,7 @@ The object is considered <em>empty</em> otherwise. An <code class="sourceCode de
 <span id="cb20-7"><a href="#cb20-7"></a>        <span class="co">// and wait for ongoing work to complete</span></span>
 <span id="cb20-8"><a href="#cb20-8"></a>        <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
 <span id="cb20-9"><a href="#cb20-9"></a>            scope<span class="op">.</span>request_stop<span class="op">()</span>;</span>
-<span id="cb20-10"><a href="#cb20-10"></a>            <span class="cf">return</span> scope<span class="op">.</span>one_empty<span class="op">()</span>;</span>
+<span id="cb20-10"><a href="#cb20-10"></a>            <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
 <span id="cb20-11"><a href="#cb20-11"></a>        <span class="op">})</span></span>
 <span id="cb20-12"><a href="#cb20-12"></a>        ;</span>
 <span id="cb20-13"><a href="#cb20-13"></a>    this_thread<span class="op">::</span>sync_wait<span class="op">(</span>program_with_termination<span class="op">)</span>;</span>
@@ -987,12 +990,8 @@ The object is considered <em>empty</em> otherwise. An <code class="sourceCode de
 <span id="cb22-3"><a href="#cb22-3"></a>sender <span class="kw">auto</span> s <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>snd2<span class="op">)</span> <span class="op">|</span> s<span class="op">.</span>spawn_future<span class="op">()</span> <span class="op">|</span> then<span class="op">(...)</span>;</span></code></pre></div>
 <p>In <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span> senders consumers won’t have support for pipe operator. As <code class="sourceCode default">spawn()</code> works similar to <code class="sourceCode default">start_detached</code> from <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>, which is a sender consumer, if we follow the same rationale, it makes sense not to support pipe operator for <code class="sourceCode default">spawn()</code>.</p>
 <p>On the other hand, <code class="sourceCode default">spawn_future()</code> is not a sender consumer, thus we might have considered adding pipe operator to it. To keep consistency with <code class="sourceCode default">spawn()</code>, at this point the paper doesn’t support pipe operator for <code class="sourceCode default">spawn_future()</code>.</p>
-<h2 data-number="6.7" id="use-of-customization-point-objects"><span class="header-section-number">6.7</span> Use of customization point objects<a href="#use-of-customization-point-objects" class="self-link"></a></h2>
-<p>Unlike <span class="citation" data-cites="P2300R4">[<a href="#ref-P2300R4" role="doc-biblioref">P2300R4</a>]</span>, this paper does not propose any use of customization point objects. While <code class="sourceCode default">start_detached</code> is a customization point object, its correspondent, <code class="sourceCode default">async_scope::spawn</code> is not.</p>
-<p>At this point, we do not believe that customizing the operations of <code class="sourceCode default">async_scope</code> will be needed by the users. Therefore, the paper does not propose any customization point objects.</p>
 <h1 data-number="7" id="q-a"><span class="header-section-number">7</span> Q &amp; A<a href="#q-a" class="self-link"></a></h1>
 <h2 data-number="7.1" id="why-does-async_scope-terminate-in-the-destructor-instead-of-blocking-like-jthread"><span class="header-section-number">7.1</span> Why does <code class="sourceCode default">async_scope</code> terminate in the destructor instead of blocking like <code class="sourceCode default">jthread</code>?<a href="#why-does-async_scope-terminate-in-the-destructor-instead-of-blocking-like-jthread" class="self-link"></a></h2>
-<p>One author’s perspective:</p>
 <ul>
 <li><code class="sourceCode default">jthread</code> blocking in the destructor is bad for composition.</li>
 <li><code class="sourceCode default">jthread</code> and <code class="sourceCode default">thread</code> should <code class="sourceCode default">terminate()</code> if the destructor runs before the thread exits.</li>
@@ -1010,7 +1009,6 @@ The object is considered <em>empty</em> otherwise. An <code class="sourceCode de
 <li>Every asynchronous lifetime must be managed with non-blocking primitives and only <code class="sourceCode default">sync_wait()</code> is used to block.</li>
 </ul>
 <h2 data-number="7.2" id="why-doesnt-the-async_scope-destructor-stop-all-the-nested-and-spawned-senders"><span class="header-section-number">7.2</span> Why doesn’t the <code class="sourceCode default">async_scope</code> destructor stop all the nested and spawned senders?<a href="#why-doesnt-the-async_scope-destructor-stop-all-the-nested-and-spawned-senders" class="self-link"></a></h2>
-<p>One author’s perspective:</p>
 <ul>
 <li><code class="sourceCode default">stop_callback</code> is not a destructor because:
 <ul>
@@ -1195,7 +1193,6 @@ The object is considered <em>empty</em> otherwise. An <code class="sourceCode de
 <ul>
 <li><code class="sourceCode default">start(op)</code> is called (before <code class="sourceCode default">spawn()</code> returns).</li>
 <li>The lifetime of <code class="sourceCode default">op</code> extends at least until <code class="sourceCode default">recv</code> is called with a completion notification.</li>
-<li>If the given work calls <code class="sourceCode default">set_error()</code> on <code class="sourceCode default">recv</code> then <code class="sourceCode default">std::terminate()</code> will be called.</li>
 </ul></li>
 <li><code class="sourceCode default">recv</code> supports the <code class="sourceCode default">get_stop_token()</code> query customization point object; this will return the stop token associated with <code class="sourceCode default">async_scope</code> object.</li>
 </ul></li>
