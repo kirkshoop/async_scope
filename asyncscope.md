@@ -76,7 +76,7 @@ All the work will be spawned in the context of a local `static_thread_pool` obje
 Because the number of work items is dynamic, one is forced to use `start_detached()` from [@P2300R4] (or something equivalent) to dynamically spawn work.
 [@P2300R4] doesn't provide any facilities to spawn dynamic work and return a sender (i.e., something like `when_all` but with a dynamic number of input senders).
 
-Using `start_detached()` here follow the *fire-and-forget* style, meaning that we have no control over the termination of the work being started.
+Using `start_detached()` here follows the *fire-and-forget* style, meaning that we have no control over the termination of the work being started.
 We don't have control over the lifetime of the operation being started.
 
 At the end of the function, we are destroying the work context and the thread pool.
@@ -222,7 +222,6 @@ As we need to process all the rows before processing columns, we will call `on_e
 Similarly, to wait for the processing of the columns to complete, we can use `on_empty()` again.
 
 It is ok if `on_empty()` is called multiple times on the same `async_scope` object.
-ource objects.
 
 ```c++
 struct tabular_data;
@@ -266,7 +265,7 @@ sender auto process(scheduler auto sch, tabular_data& data) {
 This example shows how one can write the listener loop in an HTTP server, with the help of coroutines.
 The HTTP server will continuously accept new connection and start work to handle the requests coming on the new connections.
 While the listening activity is bound in the scope of the loop, the lifetime of handling requests may exceed the scope of the loop.
-We use `async_scope` to limit the lifetime of handling the requests.
+We use `async_scope` to limit the lifetime of the request handling without blocking the acceptance of new requests.
 
 ```c++
 task<size_t> listener(int port, io_context& ctx, static_thread_pool& pool) {
@@ -305,7 +304,7 @@ The requirements for the async scope are:
  - An `async_scope` must be non-movable and non-copyable.
  - An `async_scope` must be *empty* when the destructor runs.
  - An `async_scope` must introduce a cancellation scope.
- - An `async_scope` must not provide any query CPO's on the receiver passed to the sender, other than `get_stop_token()` (in order to forward cancellation of the async_scope `stop_source` to all nested and spawned senders).
+ - An `async_scope` must not provide any query CPOs on the receiver passed to the sender, other than `get_stop_token()` (in order to forward cancellation of the async_scope `stop_source` to all nested and spawned senders).
  - An `async_scope` must allow an arbitrary sender to be nested within the scope without eagerly starting the sender (`nest()`).
  - An `async_scope` must constrain `spawn()` to accept only senders that complete with `void`.
  - An `async_scope` must provide an `@_on-empty-sender_@` that completes when all spawned senders are complete.
@@ -349,12 +348,12 @@ It should be viewed as owning the storage for that work.
 The `async_scope` may be constructed in a local context, matching the syntactic scope or the lifetime of surrounding algorithms.
 The destructor of an `async_scope` will `terminate()` if there is outstanding work in the scope at destruction time.
 
-Another way for viewing the `async_scope` is that it keeps a counter of how many work items were registered to it but have started but not yet completed.
+Another way to view the `async_scope` is that it keeps a counter of how many work items were registered to it but have not yet completed (not yet started, or in execution).
 The destructor can be called only if this counter is zero.
 
 One way to ensure that there is no work in scope at destruction time is to start the sender returned by `on_empty()` and wait for its completion (while no more work being added into the scope).
 
-Please note that there is a race between the completion of the sender returned by `on_empty()` and adding new work to the `async_scope` object.
+Note that there is a race between the completion of the sender returned by `on_empty()` and adding new work to the `async_scope` object.
 If new work is added from a work that is already in the scope, then the implementation guarantees that there is no race.
 If, however, new work is added from a different source, the implementation cannot prevent the race.
 For example, one can imagine that the new work is added just after the `on_empty()` sender completes.
@@ -377,6 +376,7 @@ The given sender must complete with `void` or be stopped.
 The given sender is not allowed to complete with an error; the user must explicitly handle the errors that might appear before passing the corresponding sender to `spawn`.
 
 As `spawn()` starts the given sender synchronously, it is important that the user provides non-blocking senders.
+This matches user expectations that `spawn()` is asynchronous and avoids surprising blocking behavior at runtime.
 The reason is that `spawn()` needs extra resources, and it's less efficient than just executing the work inline.
 Using `spawn()` with a sender generated by `on(sched, @_blocking-sender_@)` is a very useful pattern in this context.
 
@@ -571,7 +571,7 @@ Design considerations
 
 One option is to have a `async_scope` concept that has many implementations.
 
-Another option is to have a type that has one implementation per library vender.
+Another option is to have a type that has one implementation per library vendor.
 
 > **Chosen:** Due to time constraints, this paper proposes a type.
 
@@ -635,7 +635,7 @@ Another alternative considered was to call `std::terminate()` when the sender co
 This was dropped because explicit error handling is preferred to stopping the application.
 
 Another alternative is to silently drop the errors when receiving them.
-This is considered bad practice, as it will often lead to spotting bugs to late.
+This is considered bad practice, as it will often lead to spotting bugs too late.
 
 > **Chosen:** `spawn()` accepts only senders that do not call `set_error()`.
 
@@ -753,7 +753,7 @@ Essentially it does the same thing, but it can also control the lifetime of the 
 
 This paper might propose the removal of `start_detached` from `std::execution`. However, at this point, the paper doesn't make this proposal.
 
-## Supporting pipe operator
+## Supporting the pipe operator
 
 The paper, as expressed doesn't support the pipe operator to be used in conjunction with `spawn()` and `spawn_future()`.
 One might think that it is useful to write code like the following:
@@ -764,8 +764,8 @@ std::move(snd1) | s.spawn(); // returns void
 sender auto s = std::move(snd2) | s.spawn_future() | then(...);
 ```
 
-In [@P2300R4] senders consumers won't have support for pipe operator.
-As `spawn()` works similar to `start_detached` from [@P2300R4], which is a sender consumer, if we follow the same rationale, it makes sense not to support pipe operator for `spawn()`.
+In [@P2300R4] sender consumers do not have support for the pipe operator.
+As `spawn()` works similarly to `start_detached` from [@P2300R4], which is a sender consumer, if we follow the same rationale, it makes sense not to support the pipe operator for `spawn()`.
 
 On the other hand, `spawn_future()` is not a sender consumer, thus we might have considered adding pipe operator to it.
 To keep consistency with `spawn()`, at this point the paper doesn't support pipe operator for `spawn_future()`.
@@ -809,7 +809,7 @@ Principles that lead to avoid blocking in the destructor:
 If a sync context intends to ask for early completion of an async operation, then it needs to wait for that operation to actually complete before continuing (`set_value()`, `set_error()` and `set_stopped()` are the destructors for the async operation), and sync destructors must not block.
 See [Why does `async_scope` terminate in the destructor instead of blocking like `jthread`?].
 
-> NOTE: async RAII, could be used to signal early completion because it would be composed with other async operation lifetimes.
+> NOTE: async RAII could be used to signal early completion because it would be composed with other async operation lifetimes.
 > The operation being stopped would complete before the async RAII operation completed -- without any blocking.
 
 Naming
@@ -950,7 +950,7 @@ struct async_scope {
 
 1. `async_scope::~async_scope` destructs the `async_scope` object, freeing all resources
 
-2. The destructor will call `terminate()` if there is outstanding work in the `async_scope` object (i.e., work created by `spawn()` and `spawn_future()` did not complete).
+2. The destructor will call `terminate()` if there is outstanding work in the `async_scope` object (i.e., work created by `nest()`, `spawn()` and `spawn_future()` did not complete).
 
 3. *Note*: It is always safe to call the destructor after the sender returned by `on_empty()` sent the completion signal, provided that there were no calls to `nest()`, `spawn()` and `spawn_future()` since the `@_on-empty-sender_@` was started.
 
@@ -959,11 +959,13 @@ struct async_scope {
 1. `async_scope::spawn` is used to eagerly start a sender while keeping the execution in the lifetime of the `async_scope` object.
 2. *Effects*:
    - An `@_operation-state_@` object `op` will be created by connecting the given sender to a receiver `recv` of type `@_spawn-receiver_@`.
-   - If an exception occurs will be trying to create `op` in its proper storage space, the exception will be passed to the caller.
+   - If an exception occurs while trying to create `op` in its proper storage space, the exception will be passed to the caller.
    - If no exception is thrown while creating `op` and stop was not requested on our stop source, then:
      - `start(op)` is called (before `spawn()` returns).
      - The lifetime of `op` extends at least until `recv` is called with a completion notification.
    - `recv` supports the `get_stop_token()` query customization point object; this will return the stop token associated with `async_scope` object.
+   - The `async_scope` will not be *empty* until `recv` is notified about the completion of the given sender.
+
 3. *Note*: the receiver will help the `async_scope` object to keep track of how many operations are running at a given time.
 
 ## `async_scope::spawn_future`
@@ -975,7 +977,7 @@ struct async_scope {
 
 3. *Effects*:
    - An `@_operation-state_@` object `op` will be created by connecting the given sender to a receiver `recv`.
-   - If an exception occurs will be trying to create `op` in its proper storage space, the exception will be passed to the caller.
+   - If an exception occurs while trying to create `op` in its proper storage space, the exception will be passed to the caller.
    - If no exception is thrown while creating `op` and stop was not requested on our stop source, then:
      - `start(op)` is called (before `spawn_future` returns).
      - The lifetime of `op` extends at least until `recv` is called with a completion notification.
@@ -983,6 +985,10 @@ struct async_scope {
        - Let `ext_op` be the `@_operation-state_@` object returned by connecting `rsnd` to a receiver `ext_recv`.
        - If `ext_op` is started, the completion notifications received by `recv` will be forwarded to `ext_recv`, regardless whether the completion notification happened before starting `ext_op` or not.
        - It is safe not to connect `rsnd` or not to start `ext_op`.
+     - The `async_scope` will not be *empty* until one of the following is true:
+       - `rsnd` is destroyed without being connected
+       - `rsnd` is connected but `ext_op` is destroyed without being started
+       - If `rsnd` is connected to a receiver to return `ext_op`, `ext_op` is started, and `recv` is notified about the completion of the given sender
    - `recv` supports the `get_stop_token()` query customization point object; this will return a stop token object that will be stopped when:
      - the `async_scope` object is stopped (i.e., by using `async_scope::request_stop()`;
      - if `rsnd` supports  `get_stop_token()` query customization point object, when stop is requested to the object `get_stop_token(rsnd)`.
