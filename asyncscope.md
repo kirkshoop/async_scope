@@ -435,18 +435,20 @@ return when_all(s.on_empty(), std::move(snd));
 template <sender S> @_nest-sender_@<S> nest(S&& s);
 ```
 
-Returns a `@_nest-sender_@` that extends the lifetime of the `async_scope` that produced it to include the lifetime of the `@_nest-sender_@` object and, if started, the lifetime of the given sender operation.
+Returns a `@_nest-sender_@` that, when started, extends the lifetime of the `async_scope` that produced it to include the lifetime of the `@_nest-sender_@` object and the lifetime of the given sender operation.
 
 A call to `nest()` does not start the given sender.
 A call to `nest()` is not expected to incur allocations.
 
-Connecting and starting the sender returned from `nest()` will connect and start the input sender.
+The sender returned by a call to `nest()` holds a reference to the `async_scope`.
+Connecting and starting the sender returned from `nest()` will connect and start the input sender and will extend the `async_scope`'s lifetime to include the `@_nest-sender_@` and given sender operation.
 
 Similar to `spawn_future()`, `nest()` doesn't constrain the input sender to any specific shape.
 Any type of sender is accepted.
 
-The returned sender prevents the scope from ending.
-It is safe to drop the returned sender without starting it, because the `async_scope` safely manages the lifetime of the running operations.
+Unlike `spawn_future()` the returned sender does not prevent the scope from ending.
+It is safe to drop the returned sender without starting it. 
+It is not safe to start the sender after the `async_scope` has been destroyed.
 
 As `nest()` does not immediately start the given work, it is ok to pass in blocking senders.
 
@@ -829,7 +831,7 @@ alternatives: `sender_scope`, `dynamic_scope`, `dynamic_lifetime`, `scope`, `lif
 
 ## `nest`
 
-This provides a way to extend the lifetime to include a sender. This does not allocate state, call connect or start. This is the basic operation for `async_scope`. `spawn` and `spawn_future` use `nest` to extend the scope and then allocate, connect and start.
+This provides a way to build a sender that, when started, extends the lifetime of the `async_scope` to include a sender. This does not allocate state, call connect or start. This is the basic operation for `async_scope`. `spawn` and `spawn_future` use `nest` to extend the scope and then allocate, connect and start.
 
 It would be good for the name to indicate that it is a simple operation (insert, add, embed, extend might communicate allocation, which this does not do).
 
@@ -963,6 +965,7 @@ struct async_scope {
      - The lifetime of `op` extends at least until `recv` is called with a completion notification.
    - `recv` supports the `get_stop_token()` query customization point object; this will return the stop token associated with `async_scope` object.
    - The `async_scope` will not be *empty* until `recv` is notified about the completion of the given sender.
+
 3. *Note*: the receiver will help the `async_scope` object to keep track of how many operations are running at a given time.
 
 ## `async_scope::spawn_future`
@@ -999,7 +1002,7 @@ struct async_scope {
 
 ## `async_scope::nest`
 
-1. `async_scope::nest` is used to produce a `@_nest-sender_@` that nests the sender within the lifetime of the `async_scope` object.
+1. `async_scope::nest` is used to produce a `@_nest-sender_@` that, when started, nests the sender within the lifetime of the `async_scope` object.
    The given sender will be started when the `@_nest-sender_@` is started.
 
 2. The returned sender has the same completion signatures as the input sender.
@@ -1010,12 +1013,8 @@ struct async_scope {
      - Let `ext_op` be the `@_operation-state_@` object returned by connecting `rsnd` to a receiver `ext_recv`.
      - Let `op` be stored in `ext_op`.
      - If `ext_op` is started, then `op` is started and the completion notifications received by `recv` will be forwarded to `ext_recv`.
-     - It is safe not to connect `rsnd` or not to start `ext_op`.
      - *Note*: as `op` is stored in `ext_op`, calling `nest()` cannot start the given work.
-   - The `async_scope` will not be *empty* until one of the following is true:
-     - `rsnd` is destroyed without being connected
-     - `rsnd` is connected but `ext_op` is destroyed without being started
-     - `ext_op` is started, and `recv` is notified about the completion of the given sender
+     - Once `rsnd` is connected and `ext_op` started the `async_scope` will not be empty until `recv` is notified about the completion of the given sender.
    - `recv` supports the `get_stop_token()` query customization point object; this will return a stop token object that will be stopped when:
      - the `async_scope` object is stopped (i.e., by using `async_scope::request_stop()`;
      - if `rsnd` supports  `get_stop_token()` query customization point object, when stop is requested to the object `get_stop_token(rsnd)`.
@@ -1031,7 +1030,7 @@ struct async_scope {
 2. *Effects*:
    - Let `rsnd` be the sender returned by this function
    - Let `ext_op` be the `@_operation-state_@` object returned by connecting `rsnd` to a receiver `ext_recv`.
-   - If `ext_op` is started, then `ext_recv` will be notified with `set_value()` whenever all the work started in the context of the `async_scope` object (by using `nest()`, `spawn` and `spawn_future`) is completed, and no senders are in flight.
+   - If `ext_op` is started, then `ext_recv` will be notified with `set_value()` whenever all the work started in the context of the `async_scope` object (by using `spawn()` and `spawn_future()` or by using connecting and starting the sender returned from a call to `nest()`) is completed, and no senders are in flight.
    - If, after `on_empty()` is called, new work is added to the scope from other work that is started in the context of the scope then the new work must complete or be dropped before `ext_recv` is notified for completion.
    - It is safe not to connect `rsnd` or not to start `ext_op`.
 
