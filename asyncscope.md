@@ -447,7 +447,8 @@ Similar to `spawn_future()`, `nest()` doesn't constrain the input sender to any 
 Any type of sender is accepted.
 
 Unlike `spawn_future()` the returned sender does not prevent the scope from ending.
-It is not safe to drop the returned sender without starting it.
+It is safe to drop the returned sender without starting it. 
+It is not safe to start the sender after the `async_scope` has been destroyed.
 
 As `nest()` does not immediately start the given work, it is ok to pass in blocking senders.
 
