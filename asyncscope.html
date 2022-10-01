@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="mpark/wg21" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <meta name="dcterms.date" content="2022-09-11" />
+  <meta name="dcterms.date" content="2022-10-01" />
   <title>`async_scope` -- Creating scopes for non-sequential concurrency</title>
   <style>
       code{white-space: pre-wrap;}
@@ -422,7 +422,7 @@ code.sourceCode > span { display: inline; }
   </tr>
   <tr>
     <td>Date:</td>
-    <td>2022-09-11</td>
+    <td>2022-10-01</td>
   </tr>
   <tr>
     <td style="vertical-align:top">Project:</td>
@@ -467,9 +467,10 @@ code.sourceCode > span { display: inline; }
 <li><a href="#examples-of-use"><span class="toc-section-number">4</span> Examples of use<span></span></a>
 <ul>
 <li><a href="#spawning-work-from-within-a-task"><span class="toc-section-number">4.1</span> Spawning work from within a task<span></span></a></li>
-<li><a href="#starting-parallel-work"><span class="toc-section-number">4.2</span> Starting parallel work<span></span></a></li>
-<li><a href="#calling-on_empty-multiple-times"><span class="toc-section-number">4.3</span> Calling <code class="sourceCode default">on_empty</code> multiple times<span></span></a></li>
-<li><a href="#listener-loop-in-an-http-server"><span class="toc-section-number">4.4</span> Listener loop in an HTTP server<span></span></a></li>
+<li><a href="#starting-work-nested-within-a-framework"><span class="toc-section-number">4.2</span> Starting work nested within a framework<span></span></a></li>
+<li><a href="#starting-parallel-work"><span class="toc-section-number">4.3</span> Starting parallel work<span></span></a></li>
+<li><a href="#calling-on_empty-multiple-times"><span class="toc-section-number">4.4</span> Calling <code class="sourceCode default">on_empty</code> multiple times<span></span></a></li>
+<li><a href="#listener-loop-in-an-http-server"><span class="toc-section-number">4.5</span> Listener loop in an HTTP server<span></span></a></li>
 </ul></li>
 <li><a href="#async-scope-usage-guide"><span class="toc-section-number">5</span> Async Scope, usage guide<span></span></a>
 <ul>
@@ -616,7 +617,7 @@ code.sourceCode > span { display: inline; }
 <span id="cb3-3"><a href="#cb3-3"></a>system_context ctx;</span>
 <span id="cb3-4"><a href="#cb3-4"></a><span class="dt">int</span> result <span class="op">=</span> <span class="dv">0</span>;</span>
 <span id="cb3-5"><a href="#cb3-5"></a></span>
-<span id="cb3-6"><a href="#cb3-6"></a><span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
 <span id="cb3-7"><a href="#cb3-7"></a>  async_scope scope;</span>
 <span id="cb3-8"><a href="#cb3-8"></a>  scheduler <span class="kw">auto</span> sch <span class="op">=</span> ctx<span class="op">.</span>scheduler<span class="op">()</span>;</span>
 <span id="cb3-9"><a href="#cb3-9"></a></span>
@@ -641,97 +642,118 @@ code.sourceCode > span { display: inline; }
 <span id="cb3-28"><a href="#cb3-28"></a></span>
 <span id="cb3-29"><a href="#cb3-29"></a>  <span class="co">// Safely wait for all nested work</span></span>
 <span id="cb3-30"><a href="#cb3-30"></a>  this_thread<span class="op">::</span>sync_wait<span class="op">(</span>scope<span class="op">.</span>on_empty<span class="op">())</span>;</span>
-<span id="cb3-31"><a href="#cb3-31"></a><span class="op">}</span></span>
-<span id="cb3-32"><a href="#cb3-32"></a></span>
-<span id="cb3-33"><a href="#cb3-33"></a><span class="co">// The scope ensured that all work is safely joined, so result contains 13</span></span>
-<span id="cb3-34"><a href="#cb3-34"></a>std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Result: &quot;</span> <span class="op">&lt;&lt;</span> result <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>;</span>
-<span id="cb3-35"><a href="#cb3-35"></a></span>
-<span id="cb3-36"><a href="#cb3-36"></a><span class="co">// and destruction of the context is now safe</span></span></code></pre></div>
-<h2 data-number="4.2" id="starting-parallel-work"><span class="header-section-number">4.2</span> Starting parallel work<a href="#starting-parallel-work" class="self-link"></a></h2>
-<p>In this example we use the <code class="sourceCode default">async_scope</code> within lexical scope to construct an algorithm that performs parallel work. This uses the <a href="https://github.com/facebookexperimental/libunifex/blob/main/doc/api_reference.md#let_value_withinvocable-state_factory-invocable-func---sender"><code class="sourceCode default">let_value_with</code></a> algorithm implemented in <a href="https://github.com/facebookexperimental/libunifex/">libunifex</a> which simplifies in-place construction of a non-moveable object in the <code class="sourceCode default">let_value_with</code> algorithms operation state. Here foo launches 100 tasks that concurrently run on some scheduler provided to <code class="sourceCode default">foo</code>, through its connected receiver, and then are asynchronously joined. In this case the context the work is run on will be the <code class="sourceCode default">system_context</code>’s scheduler, from <span class="citation" data-cites="P2079R2">[<a href="#ref-P2079R2" role="doc-biblioref">P2079R2</a>]</span>. This structure emulates how we might build a parallel algorithm where each <code class="sourceCode default">some_work</code> might be operating on a fragment of data.</p>
+<span id="cb3-31"><a href="#cb3-31"></a></span>
+<span id="cb3-32"><a href="#cb3-32"></a>  std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Result: &quot;</span> <span class="op">&lt;&lt;</span> result <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>;</span>
+<span id="cb3-33"><a href="#cb3-33"></a><span class="op">}</span></span>
+<span id="cb3-34"><a href="#cb3-34"></a></span>
+<span id="cb3-35"><a href="#cb3-35"></a><span class="co">// The scope ensured that all work is safely joined, so result contains 13</span></span>
+<span id="cb3-36"><a href="#cb3-36"></a></span>
+<span id="cb3-37"><a href="#cb3-37"></a><span class="co">// and destruction of the context is now safe</span></span></code></pre></div>
+<h2 data-number="4.2" id="starting-work-nested-within-a-framework"><span class="header-section-number">4.2</span> Starting work nested within a framework<a href="#starting-work-nested-within-a-framework" class="self-link"></a></h2>
+<p>In this example we use the <code class="sourceCode default">async_scope</code> within a class to start work when the object receives a message and to wait for that work to complete before closing. <code class="sourceCode default">my_window::start()</code> starts the sender using storage reserved in <code class="sourceCode default">my_window</code> for this purpose.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">using</span> <span class="kw">namespace</span> std<span class="op">::</span>execution;</span>
 <span id="cb4-2"><a href="#cb4-2"></a></span>
-<span id="cb4-3"><a href="#cb4-3"></a>sender <span class="kw">auto</span> some_work<span class="op">(</span><span class="dt">int</span> work_index<span class="op">)</span>;</span>
-<span id="cb4-4"><a href="#cb4-4"></a></span>
-<span id="cb4-5"><a href="#cb4-5"></a>sender <span class="kw">auto</span> foo<span class="op">(</span>scheduler <span class="kw">auto</span> sch<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-6"><a href="#cb4-6"></a>  <span class="cf">return</span> schedule<span class="op">(</span>sch<span class="op">)</span></span>
-<span id="cb4-7"><a href="#cb4-7"></a>       <span class="op">|</span> then<span class="op">([]{</span> std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Before tasks launch</span><span class="sc">\n</span><span class="st">&quot;</span>; <span class="op">})</span></span>
-<span id="cb4-8"><a href="#cb4-8"></a>       <span class="op">|</span> let_value_with<span class="op">(</span></span>
-<span id="cb4-9"><a href="#cb4-9"></a>           <span class="op">[]{</span> <span class="cf">return</span> async_scope<span class="op">{}</span>; <span class="op">}</span>,</span>
-<span id="cb4-10"><a href="#cb4-10"></a>           <span class="op">[&amp;</span>sch<span class="op">](</span>async_scope<span class="op">&amp;</span> scope<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-11"><a href="#cb4-11"></a>             <span class="co">// Create parallel work</span></span>
-<span id="cb4-12"><a href="#cb4-12"></a>             <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> <span class="dv">100</span>; <span class="op">++</span>i<span class="op">)</span></span>
-<span id="cb4-13"><a href="#cb4-13"></a>               scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
-<span id="cb4-14"><a href="#cb4-14"></a>             <span class="co">// Join the work with the help of the scope</span></span>
-<span id="cb4-15"><a href="#cb4-15"></a>             <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
-<span id="cb4-16"><a href="#cb4-16"></a>           <span class="op">}</span></span>
-<span id="cb4-17"><a href="#cb4-17"></a>       <span class="op">)</span></span>
-<span id="cb4-18"><a href="#cb4-18"></a>       <span class="op">|</span> then<span class="op">([]{</span> std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;After tasks complete</span><span class="sc">\n</span><span class="st">&quot;</span>; <span class="op">})</span></span>
-<span id="cb4-19"><a href="#cb4-19"></a>       ;</span>
-<span id="cb4-20"><a href="#cb4-20"></a><span class="op">}</span></span></code></pre></div>
-<h2 data-number="4.3" id="calling-on_empty-multiple-times"><span class="header-section-number">4.3</span> Calling <code class="sourceCode default">on_empty</code> multiple times<a href="#calling-on_empty-multiple-times" class="self-link"></a></h2>
+<span id="cb4-3"><a href="#cb4-3"></a><span class="kw">class</span> my_window <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4"></a>  <span class="co">//..</span></span>
+<span id="cb4-5"><a href="#cb4-5"></a>  system_context ctx;</span>
+<span id="cb4-6"><a href="#cb4-6"></a>  scheduler <span class="kw">auto</span> sch<span class="op">{</span>ctx<span class="op">.</span>scheduler<span class="op">()}</span>;</span>
+<span id="cb4-7"><a href="#cb4-7"></a>  async_scope scope<span class="op">{}</span>;</span>
+<span id="cb4-8"><a href="#cb4-8"></a><span class="op">}</span>;</span>
+<span id="cb4-9"><a href="#cb4-9"></a></span>
+<span id="cb4-10"><a href="#cb4-10"></a>sender <span class="kw">auto</span> some_work<span class="op">(</span><span class="dt">int</span> id<span class="op">)</span>;</span>
+<span id="cb4-11"><a href="#cb4-11"></a></span>
+<span id="cb4-12"><a href="#cb4-12"></a><span class="dt">void</span> my_window<span class="op">::</span>onMyMessage<span class="op">(</span><span class="dt">int</span> i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-13"><a href="#cb4-13"></a>  <span class="kw">this</span><span class="op">-&gt;</span>scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span><span class="kw">this</span><span class="op">-&gt;</span>sch, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb4-14"><a href="#cb4-14"></a><span class="op">}</span></span>
+<span id="cb4-15"><a href="#cb4-15"></a></span>
+<span id="cb4-16"><a href="#cb4-16"></a><span class="dt">void</span> my_window<span class="op">::</span>onClickClose<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-17"><a href="#cb4-17"></a>  <span class="kw">this</span><span class="op">-&gt;</span>start<span class="op">(</span><span class="kw">this</span><span class="op">-&gt;</span>scope<span class="op">.</span>on_empty<span class="op">()</span> <span class="op">|</span> then<span class="op">([&amp;]{</span><span class="kw">this</span><span class="op">-&gt;</span>post<span class="op">(</span>close_message<span class="op">{})</span>;<span class="op">}))</span>;</span>
+<span id="cb4-18"><a href="#cb4-18"></a><span class="op">}</span></span></code></pre></div>
+<h2 data-number="4.3" id="starting-parallel-work"><span class="header-section-number">4.3</span> Starting parallel work<a href="#starting-parallel-work" class="self-link"></a></h2>
+<p>In this example we use the <code class="sourceCode default">async_scope</code> within lexical scope to construct an algorithm that performs parallel work. This uses the <a href="https://github.com/facebookexperimental/libunifex/blob/main/doc/api_reference.md#let_value_withinvocable-state_factory-invocable-func---sender"><code class="sourceCode default">let_value_with</code></a> algorithm implemented in <a href="https://github.com/facebookexperimental/libunifex/">libunifex</a> which simplifies in-place construction of a non-moveable object in the <code class="sourceCode default">let_value_with</code> algorithms operation state. Here foo launches 100 tasks that concurrently run on some scheduler provided to <code class="sourceCode default">foo</code>, through its connected receiver, and then are asynchronously joined. In this case the context the work is run on will be the <code class="sourceCode default">system_context</code>’s scheduler, from <span class="citation" data-cites="P2079R2">[<a href="#ref-P2079R2" role="doc-biblioref">P2079R2</a>]</span>. This structure emulates how we might build a parallel algorithm where each <code class="sourceCode default">some_work</code> might be operating on a fragment of data.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">using</span> <span class="kw">namespace</span> std<span class="op">::</span>execution;</span>
+<span id="cb5-2"><a href="#cb5-2"></a></span>
+<span id="cb5-3"><a href="#cb5-3"></a>sender <span class="kw">auto</span> some_work<span class="op">(</span><span class="dt">int</span> work_index<span class="op">)</span>;</span>
+<span id="cb5-4"><a href="#cb5-4"></a></span>
+<span id="cb5-5"><a href="#cb5-5"></a>sender <span class="kw">auto</span> foo<span class="op">(</span>scheduler <span class="kw">auto</span> sch<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6"></a>  <span class="cf">return</span> schedule<span class="op">(</span>sch<span class="op">)</span></span>
+<span id="cb5-7"><a href="#cb5-7"></a>       <span class="op">|</span> then<span class="op">([]{</span> std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Before tasks launch</span><span class="sc">\n</span><span class="st">&quot;</span>; <span class="op">})</span></span>
+<span id="cb5-8"><a href="#cb5-8"></a>       <span class="op">|</span> let_value_with<span class="op">(</span></span>
+<span id="cb5-9"><a href="#cb5-9"></a>           <span class="op">[]{</span> <span class="cf">return</span> async_scope<span class="op">{}</span>; <span class="op">}</span>,</span>
+<span id="cb5-10"><a href="#cb5-10"></a>           <span class="op">[&amp;</span>sch<span class="op">](</span>async_scope<span class="op">&amp;</span> scope<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-11"><a href="#cb5-11"></a>             <span class="co">// Create parallel work</span></span>
+<span id="cb5-12"><a href="#cb5-12"></a>             <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> <span class="dv">100</span>; <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb5-13"><a href="#cb5-13"></a>               scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb5-14"><a href="#cb5-14"></a>             <span class="co">// Join the work with the help of the scope</span></span>
+<span id="cb5-15"><a href="#cb5-15"></a>             <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb5-16"><a href="#cb5-16"></a>           <span class="op">}</span></span>
+<span id="cb5-17"><a href="#cb5-17"></a>       <span class="op">)</span></span>
+<span id="cb5-18"><a href="#cb5-18"></a>       <span class="op">|</span> then<span class="op">([]{</span> std<span class="op">::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;After tasks complete</span><span class="sc">\n</span><span class="st">&quot;</span>; <span class="op">})</span></span>
+<span id="cb5-19"><a href="#cb5-19"></a>       ;</span>
+<span id="cb5-20"><a href="#cb5-20"></a><span class="op">}</span></span></code></pre></div>
+<h2 data-number="4.4" id="calling-on_empty-multiple-times"><span class="header-section-number">4.4</span> Calling <code class="sourceCode default">on_empty</code> multiple times<a href="#calling-on_empty-multiple-times" class="self-link"></a></h2>
 <p>In this example we showcase how <code class="sourceCode default">async_scope</code> objects can be used as gateways between different operations multiple times. We have tabular data that needs to be processed in a clear sequence. First we need to preprocess the whole data. Then, we need to process the data by rows (each row can be processed in parallel). Then, we need to process the data by columns (each column can be processed in parallel). Finally, we post-process the tabular data.</p>
 <p>As we are creating dynamic work for processing the rows and processing the columns, we are putting the spawned work in an <code class="sourceCode default">async_scope</code> object. As we need to process all the rows before processing columns, we will call <code class="sourceCode default">on_empty()</code> on our <code class="sourceCode default">async_scope</code> object to get notified when the processing of all the rows has completed. Similarly, to wait for the processing of the columns to complete, we can use <code class="sourceCode default">on_empty()</code> again.</p>
 <p>It is ok if <code class="sourceCode default">on_empty()</code> is called multiple times on the same <code class="sourceCode default">async_scope</code> object. When the sender returned from <code class="sourceCode default">on_empty()</code> is started, it will complete the next time that the <code class="sourceCode default">async_scope</code> is empty.</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">struct</span> tabular_data;</span>
-<span id="cb5-2"><a href="#cb5-2"></a>sender <span class="kw">auto</span> preprocess<span class="op">(</span>tabular_data<span class="op">&amp;)</span>;</span>
-<span id="cb5-3"><a href="#cb5-3"></a>sender <span class="kw">auto</span> postprocess<span class="op">(</span>tabular_data<span class="op">&amp;)</span>;</span>
-<span id="cb5-4"><a href="#cb5-4"></a>sender <span class="kw">auto</span> process_row<span class="op">(</span>tabular_data<span class="op">&amp;</span>, <span class="dt">int</span> row<span class="op">)</span>;</span>
-<span id="cb5-5"><a href="#cb5-5"></a>sender <span class="kw">auto</span> process_col<span class="op">(</span>tabular_data<span class="op">&amp;</span>, <span class="dt">int</span> col<span class="op">)</span>;</span>
-<span id="cb5-6"><a href="#cb5-6"></a></span>
-<span id="cb5-7"><a href="#cb5-7"></a>sender <span class="kw">auto</span> process<span class="op">(</span>scheduler <span class="kw">auto</span> sch, tabular_data<span class="op">&amp;</span> data<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb5-8"><a href="#cb5-8"></a>  <span class="cf">return</span> schedule<span class="op">(</span>sch<span class="op">)</span></span>
-<span id="cb5-9"><a href="#cb5-9"></a>       <span class="op">|</span> let_value_with<span class="op">(</span></span>
-<span id="cb5-10"><a href="#cb5-10"></a>           <span class="op">[]{</span> <span class="cf">return</span> async_scope<span class="op">{}</span>; <span class="op">}</span>,</span>
-<span id="cb5-11"><a href="#cb5-11"></a>           <span class="op">[&amp;](</span>async_scope<span class="op">&amp;</span> scope<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb5-12"><a href="#cb5-12"></a>             <span class="cf">return</span> just<span class="op">()</span></span>
-<span id="cb5-13"><a href="#cb5-13"></a>                  <span class="co">// first phase: preprocess the tabular data</span></span>
-<span id="cb5-14"><a href="#cb5-14"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span> <span class="cf">return</span> preprocess<span class="op">(</span>data<span class="op">)</span>; <span class="op">})</span></span>
-<span id="cb5-15"><a href="#cb5-15"></a>                  <span class="co">// second phase: process the data by rows, in parallel</span></span>
-<span id="cb5-16"><a href="#cb5-16"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
-<span id="cb5-17"><a href="#cb5-17"></a>                      <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> data<span class="op">.</span>num_rows<span class="op">()</span>; <span class="op">++</span>i<span class="op">)</span></span>
-<span id="cb5-18"><a href="#cb5-18"></a>                        scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, process_row<span class="op">(</span>data, i<span class="op">)))</span>;</span>
-<span id="cb5-19"><a href="#cb5-19"></a>                      <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
-<span id="cb5-20"><a href="#cb5-20"></a>                  <span class="op">})</span></span>
-<span id="cb5-21"><a href="#cb5-21"></a>                  <span class="co">// third phase: process the data by columns, in parallel</span></span>
-<span id="cb5-22"><a href="#cb5-22"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
-<span id="cb5-23"><a href="#cb5-23"></a>                      <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> data<span class="op">.</span>num_cols<span class="op">()</span>; <span class="op">++</span>i<span class="op">)</span></span>
-<span id="cb5-24"><a href="#cb5-24"></a>                        scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, process_col<span class="op">(</span>data, i<span class="op">)))</span>;</span>
-<span id="cb5-25"><a href="#cb5-25"></a>                      <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
-<span id="cb5-26"><a href="#cb5-26"></a>                  <span class="op">})</span></span>
-<span id="cb5-27"><a href="#cb5-27"></a>                  <span class="co">// fourth phase: postprocess the data</span></span>
-<span id="cb5-28"><a href="#cb5-28"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span> <span class="cf">return</span> postprocess<span class="op">(</span>data<span class="op">)</span>; <span class="op">})</span></span>
-<span id="cb5-29"><a href="#cb5-29"></a>                  ;</span>
-<span id="cb5-30"><a href="#cb5-30"></a>           <span class="op">}</span></span>
-<span id="cb5-31"><a href="#cb5-31"></a>       <span class="op">)</span></span>
-<span id="cb5-32"><a href="#cb5-32"></a>       ;</span>
-<span id="cb5-33"><a href="#cb5-33"></a><span class="op">}</span></span></code></pre></div>
-<h2 data-number="4.4" id="listener-loop-in-an-http-server"><span class="header-section-number">4.4</span> Listener loop in an HTTP server<a href="#listener-loop-in-an-http-server" class="self-link"></a></h2>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1"></a><span class="kw">struct</span> tabular_data;</span>
+<span id="cb6-2"><a href="#cb6-2"></a>sender <span class="kw">auto</span> preprocess<span class="op">(</span>tabular_data<span class="op">&amp;)</span>;</span>
+<span id="cb6-3"><a href="#cb6-3"></a>sender <span class="kw">auto</span> postprocess<span class="op">(</span>tabular_data<span class="op">&amp;)</span>;</span>
+<span id="cb6-4"><a href="#cb6-4"></a>sender <span class="kw">auto</span> process_row<span class="op">(</span>tabular_data<span class="op">&amp;</span>, <span class="dt">int</span> row<span class="op">)</span>;</span>
+<span id="cb6-5"><a href="#cb6-5"></a>sender <span class="kw">auto</span> process_col<span class="op">(</span>tabular_data<span class="op">&amp;</span>, <span class="dt">int</span> col<span class="op">)</span>;</span>
+<span id="cb6-6"><a href="#cb6-6"></a></span>
+<span id="cb6-7"><a href="#cb6-7"></a>sender <span class="kw">auto</span> process<span class="op">(</span>scheduler <span class="kw">auto</span> sch, tabular_data<span class="op">&amp;</span> data<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-8"><a href="#cb6-8"></a>  <span class="cf">return</span> schedule<span class="op">(</span>sch<span class="op">)</span></span>
+<span id="cb6-9"><a href="#cb6-9"></a>       <span class="op">|</span> let_value_with<span class="op">(</span></span>
+<span id="cb6-10"><a href="#cb6-10"></a>           <span class="op">[]{</span> <span class="cf">return</span> async_scope<span class="op">{}</span>; <span class="op">}</span>,</span>
+<span id="cb6-11"><a href="#cb6-11"></a>           <span class="op">[&amp;](</span>async_scope<span class="op">&amp;</span> scope<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-12"><a href="#cb6-12"></a>             <span class="cf">return</span> just<span class="op">()</span></span>
+<span id="cb6-13"><a href="#cb6-13"></a>                  <span class="co">// first phase: preprocess the tabular data</span></span>
+<span id="cb6-14"><a href="#cb6-14"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span> <span class="cf">return</span> preprocess<span class="op">(</span>data<span class="op">)</span>; <span class="op">})</span></span>
+<span id="cb6-15"><a href="#cb6-15"></a>                  <span class="co">// second phase: process the data by rows, in parallel</span></span>
+<span id="cb6-16"><a href="#cb6-16"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
+<span id="cb6-17"><a href="#cb6-17"></a>                      <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> data<span class="op">.</span>num_rows<span class="op">()</span>; <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb6-18"><a href="#cb6-18"></a>                        scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, process_row<span class="op">(</span>data, i<span class="op">)))</span>;</span>
+<span id="cb6-19"><a href="#cb6-19"></a>                      <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb6-20"><a href="#cb6-20"></a>                  <span class="op">})</span></span>
+<span id="cb6-21"><a href="#cb6-21"></a>                  <span class="co">// third phase: process the data by columns, in parallel</span></span>
+<span id="cb6-22"><a href="#cb6-22"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
+<span id="cb6-23"><a href="#cb6-23"></a>                      <span class="cf">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span>; i <span class="op">&lt;</span> data<span class="op">.</span>num_cols<span class="op">()</span>; <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb6-24"><a href="#cb6-24"></a>                        scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sch, process_col<span class="op">(</span>data, i<span class="op">)))</span>;</span>
+<span id="cb6-25"><a href="#cb6-25"></a>                      <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb6-26"><a href="#cb6-26"></a>                  <span class="op">})</span></span>
+<span id="cb6-27"><a href="#cb6-27"></a>                  <span class="co">// fourth phase: postprocess the data</span></span>
+<span id="cb6-28"><a href="#cb6-28"></a>                  <span class="op">|</span> let_value<span class="op">([&amp;]{</span> <span class="cf">return</span> postprocess<span class="op">(</span>data<span class="op">)</span>; <span class="op">})</span></span>
+<span id="cb6-29"><a href="#cb6-29"></a>                  ;</span>
+<span id="cb6-30"><a href="#cb6-30"></a>           <span class="op">}</span></span>
+<span id="cb6-31"><a href="#cb6-31"></a>       <span class="op">)</span></span>
+<span id="cb6-32"><a href="#cb6-32"></a>       ;</span>
+<span id="cb6-33"><a href="#cb6-33"></a><span class="op">}</span></span></code></pre></div>
+<h2 data-number="4.5" id="listener-loop-in-an-http-server"><span class="header-section-number">4.5</span> Listener loop in an HTTP server<a href="#listener-loop-in-an-http-server" class="self-link"></a></h2>
 <p>This example shows how one can write the listener loop in an HTTP server, with the help of coroutines. The HTTP server will continuously accept new connection and start work to handle the requests coming on the new connections. While the listening activity is bound in the scope of the loop, the lifetime of handling requests may exceed the scope of the loop. We use <code class="sourceCode default">async_scope</code> to limit the lifetime of the request handling without blocking the acceptance of new requests.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1"></a>task<span class="op">&lt;</span><span class="dt">size_t</span><span class="op">&gt;</span> listener<span class="op">(</span><span class="dt">int</span> port, io_context<span class="op">&amp;</span> ctx, static_thread_pool<span class="op">&amp;</span> pool<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-2"><a href="#cb6-2"></a>    listening_socket listen_sock<span class="op">{</span>port<span class="op">}</span>;</span>
-<span id="cb6-3"><a href="#cb6-3"></a>    async_scope work_scope;</span>
-<span id="cb6-4"><a href="#cb6-4"></a>    <span class="dt">size_t</span> count<span class="op">{</span><span class="dv">0</span><span class="op">}</span>;</span>
-<span id="cb6-5"><a href="#cb6-5"></a>    <span class="cf">while</span> <span class="op">(!</span>ctx<span class="op">.</span>is_stopped<span class="op">())</span> <span class="op">{</span></span>
-<span id="cb6-6"><a href="#cb6-6"></a>        <span class="co">// Accept a new connection</span></span>
-<span id="cb6-7"><a href="#cb6-7"></a>        connection conn <span class="op">=</span> <span class="kw">co_await</span> async_accept<span class="op">(</span>ctx, listen_sock<span class="op">)</span>;</span>
-<span id="cb6-8"><a href="#cb6-8"></a>        count<span class="op">++</span>;</span>
-<span id="cb6-9"><a href="#cb6-9"></a></span>
-<span id="cb6-10"><a href="#cb6-10"></a>        <span class="co">// Create work to handle the connection in the scope of `work_scope`</span></span>
-<span id="cb6-11"><a href="#cb6-11"></a>        conn_data data<span class="op">{</span>std<span class="op">::</span>move<span class="op">(</span>conn<span class="op">)</span>, ctx, pool<span class="op">}</span>;</span>
-<span id="cb6-12"><a href="#cb6-12"></a>        sender <span class="kw">auto</span> snd</span>
-<span id="cb6-13"><a href="#cb6-13"></a>            <span class="op">=</span> just<span class="op">()</span></span>
-<span id="cb6-14"><a href="#cb6-14"></a>            <span class="op">|</span> let_value<span class="op">([</span>data <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>data<span class="op">)]()</span> <span class="op">{</span></span>
-<span id="cb6-15"><a href="#cb6-15"></a>                  <span class="cf">return</span> handle_connection<span class="op">(</span>data<span class="op">)</span>;</span>
-<span id="cb6-16"><a href="#cb6-16"></a>              <span class="op">})</span></span>
-<span id="cb6-17"><a href="#cb6-17"></a>            ;</span>
-<span id="cb6-18"><a href="#cb6-18"></a>        work_scope<span class="op">.</span>spawn<span class="op">(</span>std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>;</span>
-<span id="cb6-19"><a href="#cb6-19"></a>    <span class="op">}</span></span>
-<span id="cb6-20"><a href="#cb6-20"></a>    <span class="co">// Continue only after all requests are handled</span></span>
-<span id="cb6-21"><a href="#cb6-21"></a>    <span class="kw">co_await</span> work_scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
-<span id="cb6-22"><a href="#cb6-22"></a>    <span class="co">// At this point, all the request handling is complete</span></span>
-<span id="cb6-23"><a href="#cb6-23"></a>    <span class="kw">co_return</span> count;</span>
-<span id="cb6-24"><a href="#cb6-24"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1"></a>task<span class="op">&lt;</span><span class="dt">size_t</span><span class="op">&gt;</span> listener<span class="op">(</span><span class="dt">int</span> port, io_context<span class="op">&amp;</span> ctx, static_thread_pool<span class="op">&amp;</span> pool<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2"></a>    listening_socket listen_sock<span class="op">{</span>port<span class="op">}</span>;</span>
+<span id="cb7-3"><a href="#cb7-3"></a>    async_scope work_scope;</span>
+<span id="cb7-4"><a href="#cb7-4"></a>    <span class="dt">size_t</span> count<span class="op">{</span><span class="dv">0</span><span class="op">}</span>;</span>
+<span id="cb7-5"><a href="#cb7-5"></a>    <span class="cf">while</span> <span class="op">(!</span>ctx<span class="op">.</span>is_stopped<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb7-6"><a href="#cb7-6"></a>        <span class="co">// Accept a new connection</span></span>
+<span id="cb7-7"><a href="#cb7-7"></a>        connection conn <span class="op">=</span> <span class="kw">co_await</span> async_accept<span class="op">(</span>ctx, listen_sock<span class="op">)</span>;</span>
+<span id="cb7-8"><a href="#cb7-8"></a>        count<span class="op">++</span>;</span>
+<span id="cb7-9"><a href="#cb7-9"></a></span>
+<span id="cb7-10"><a href="#cb7-10"></a>        <span class="co">// Create work to handle the connection in the scope of `work_scope`</span></span>
+<span id="cb7-11"><a href="#cb7-11"></a>        conn_data data<span class="op">{</span>std<span class="op">::</span>move<span class="op">(</span>conn<span class="op">)</span>, ctx, pool<span class="op">}</span>;</span>
+<span id="cb7-12"><a href="#cb7-12"></a>        sender <span class="kw">auto</span> snd</span>
+<span id="cb7-13"><a href="#cb7-13"></a>            <span class="op">=</span> just<span class="op">()</span></span>
+<span id="cb7-14"><a href="#cb7-14"></a>            <span class="op">|</span> let_value<span class="op">([</span>data <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>data<span class="op">)]()</span> <span class="op">{</span></span>
+<span id="cb7-15"><a href="#cb7-15"></a>                  <span class="cf">return</span> handle_connection<span class="op">(</span>data<span class="op">)</span>;</span>
+<span id="cb7-16"><a href="#cb7-16"></a>              <span class="op">})</span></span>
+<span id="cb7-17"><a href="#cb7-17"></a>            ;</span>
+<span id="cb7-18"><a href="#cb7-18"></a>        work_scope<span class="op">.</span>spawn<span class="op">(</span>std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>;</span>
+<span id="cb7-19"><a href="#cb7-19"></a>    <span class="op">}</span></span>
+<span id="cb7-20"><a href="#cb7-20"></a>    <span class="co">// Continue only after all requests are handled</span></span>
+<span id="cb7-21"><a href="#cb7-21"></a>    <span class="kw">co_await</span> work_scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb7-22"><a href="#cb7-22"></a>    <span class="co">// At this point, all the request handling is complete</span></span>
+<span id="cb7-23"><a href="#cb7-23"></a>    <span class="kw">co_return</span> count;</span>
+<span id="cb7-24"><a href="#cb7-24"></a><span class="op">}</span></span></code></pre></div>
 <h1 data-number="5" id="async-scope-usage-guide"><span class="header-section-number">5</span> Async Scope, usage guide<a href="#async-scope-usage-guide" class="self-link"></a></h1>
 <p>The requirements for the async scope are:</p>
 <ul>
@@ -746,33 +768,33 @@ code.sourceCode > span { display: inline; }
 </ul>
 <p>More on these items can be found below in the sections below.</p>
 <h2 data-number="5.1" id="definitions"><span class="header-section-number">5.1</span> Definitions<a href="#definitions" class="self-link"></a></h2>
-<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1"></a><span class="kw">struct</span> async_scope <span class="op">{</span></span>
-<span id="cb7-2"><a href="#cb7-2"></a>    async_scope<span class="op">()</span>;</span>
-<span id="cb7-3"><a href="#cb7-3"></a>    <span class="op">~</span>async_scope<span class="op">()</span>;</span>
-<span id="cb7-4"><a href="#cb7-4"></a>    async_scope<span class="op">(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb7-5"><a href="#cb7-5"></a>    async_scope<span class="op">(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb7-6"><a href="#cb7-6"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb7-7"><a href="#cb7-7"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb7-8"><a href="#cb7-8"></a></span>
-<span id="cb7-9"><a href="#cb7-9"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span></span>
-<span id="cb7-10"><a href="#cb7-10"></a>    <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
-<span id="cb7-11"><a href="#cb7-11"></a></span>
-<span id="cb7-12"><a href="#cb7-12"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
-<span id="cb7-13"><a href="#cb7-13"></a>    <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
-<span id="cb7-14"><a href="#cb7-14"></a></span>
-<span id="cb7-15"><a href="#cb7-15"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
-<span id="cb7-16"><a href="#cb7-16"></a>    <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
-<span id="cb7-17"><a href="#cb7-17"></a></span>
-<span id="cb7-18"><a href="#cb7-18"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
-<span id="cb7-19"><a href="#cb7-19"></a>    <em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
-<span id="cb7-20"><a href="#cb7-20"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
-<span id="cb7-21"><a href="#cb7-21"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
-<span id="cb7-22"><a href="#cb7-22"></a>    <em>on-empty-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> when_empty<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
-<span id="cb7-23"><a href="#cb7-23"></a></span>
-<span id="cb7-24"><a href="#cb7-24"></a>    in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span>
-<span id="cb7-25"><a href="#cb7-25"></a>    in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
-<span id="cb7-26"><a href="#cb7-26"></a>    <span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span>
-<span id="cb7-27"><a href="#cb7-27"></a><span class="op">}</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">struct</span> async_scope <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>    async_scope<span class="op">()</span>;</span>
+<span id="cb8-3"><a href="#cb8-3"></a>    <span class="op">~</span>async_scope<span class="op">()</span>;</span>
+<span id="cb8-4"><a href="#cb8-4"></a>    async_scope<span class="op">(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb8-5"><a href="#cb8-5"></a>    async_scope<span class="op">(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb8-6"><a href="#cb8-6"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb8-7"><a href="#cb8-7"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb8-8"><a href="#cb8-8"></a></span>
+<span id="cb8-9"><a href="#cb8-9"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span></span>
+<span id="cb8-10"><a href="#cb8-10"></a>    <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb8-11"><a href="#cb8-11"></a></span>
+<span id="cb8-12"><a href="#cb8-12"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb8-13"><a href="#cb8-13"></a>    <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb8-14"><a href="#cb8-14"></a></span>
+<span id="cb8-15"><a href="#cb8-15"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb8-16"><a href="#cb8-16"></a>    <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb8-17"><a href="#cb8-17"></a></span>
+<span id="cb8-18"><a href="#cb8-18"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
+<span id="cb8-19"><a href="#cb8-19"></a>    <em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb8-20"><a href="#cb8-20"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb8-21"><a href="#cb8-21"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
+<span id="cb8-22"><a href="#cb8-22"></a>    <em>on-empty-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> when_empty<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb8-23"><a href="#cb8-23"></a></span>
+<span id="cb8-24"><a href="#cb8-24"></a>    in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb8-25"><a href="#cb8-25"></a>    in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb8-26"><a href="#cb8-26"></a>    <span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb8-27"><a href="#cb8-27"></a><span class="op">}</span>;</span></code></pre></div>
 <h2 data-number="5.2" id="lifetime"><span class="header-section-number">5.2</span> Lifetime<a href="#lifetime" class="self-link"></a></h2>
 <p>An <code class="sourceCode default">async_scope</code> object must outlive work that is spawned on it. It should be viewed as owning the storage for that work. The <code class="sourceCode default">async_scope</code> may be constructed in a local context, matching the syntactic scope or the lifetime of surrounding algorithms. The destructor of an <code class="sourceCode default">async_scope</code> will <code class="sourceCode default">terminate()</code> if there is outstanding work in the scope at destruction time.</p>
 <p>Another way to view the <code class="sourceCode default">async_scope</code> is that it keeps a counter of how many senders were started with it, but have not yet completed (in execution). The destructor can be called only while this counter is zero.</p>
@@ -780,21 +802,21 @@ code.sourceCode > span { display: inline; }
 <p>Note that there is a race between the completion of the sender returned by <code class="sourceCode default">on_empty()</code> and adding new work to the <code class="sourceCode default">async_scope</code> object. If new work is added from a work that is already in the scope, then the implementation guarantees that there is no race. If, however, new work is added from a different source, the implementation cannot prevent the race. For example, one can imagine that the new work is added just after the <code class="sourceCode default">on_empty()</code> sender starts.</p>
 <p>Please see <a href="#q-a">Q &amp; A</a> section for more details on reasons why calling <code class="sourceCode default">terminate()</code> is preferred to implicit waiting.</p>
 <h2 data-number="5.3" id="spawn"><span class="header-section-number">5.3</span> <code class="sourceCode default">spawn()</code><a href="#spawn" class="self-link"></a></h2>
-<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span> <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span> <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
 <p>Eagerly launches work on the <code class="sourceCode default">async_scope</code>. This involves an allocation for the <code class="sourceCode default"><em>operation-state</em></code> of the sender until it completes.</p>
 <p>This is similar to <code class="sourceCode default">start_detached()</code> from <span class="citation" data-cites="P2300R5">[<a href="#ref-P2300R5" role="doc-biblioref">P2300R5</a>]</span>, but we keep track of the lifetime of the given work.</p>
 <p>The given sender must complete with <code class="sourceCode default">void</code> or <code class="sourceCode default">stopped</code>. The given sender is not allowed to complete with an error; the user must explicitly handle the errors that might appear before passing the corresponding sender to <code class="sourceCode default">spawn()</code>.</p>
 <p>As <code class="sourceCode default">spawn()</code> starts the given sender synchronously, it is important that the user provides non-blocking senders. This matches user expectations that <code class="sourceCode default">spawn()</code> is asynchronous and avoids surprising blocking behavior at runtime. The reason is that <code class="sourceCode default">spawn()</code> needs extra resources, and it’s less efficient than just executing the work inline. Using <code class="sourceCode default">spawn()</code> with a sender generated by <code class="sourceCode default">on(sched, <em>blocking-sender</em>)</code> is a very useful pattern in this context.</p>
 <p>Usage example:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
-<span id="cb9-2"><a href="#cb9-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
-<span id="cb9-3"><a href="#cb9-3"></a>async_scope s;</span>
-<span id="cb9-4"><a href="#cb9-4"></a><span class="op">...</span></span>
-<span id="cb9-5"><a href="#cb9-5"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">100</span>; i<span class="op">++)</span></span>
-<span id="cb9-6"><a href="#cb9-6"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
-<span id="cb9-7"><a href="#cb9-7"></a><span class="cf">return</span> s<span class="op">.</span>on_empty<span class="op">()</span>; <span class="co">// completes when all work is done</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
+<span id="cb10-3"><a href="#cb10-3"></a>async_scope s;</span>
+<span id="cb10-4"><a href="#cb10-4"></a><span class="op">...</span></span>
+<span id="cb10-5"><a href="#cb10-5"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">100</span>; i<span class="op">++)</span></span>
+<span id="cb10-6"><a href="#cb10-6"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb10-7"><a href="#cb10-7"></a><span class="cf">return</span> s<span class="op">.</span>on_empty<span class="op">()</span>; <span class="co">// completes when all work is done</span></span></code></pre></div>
 <h2 data-number="5.4" id="spawn_future"><span class="header-section-number">5.4</span> <code class="sourceCode default">spawn_future()</code><a href="#spawn_future" class="self-link"></a></h2>
-<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
 <p>Eagerly launches work on the <code class="sourceCode default">async_scope</code> but returns a <code class="sourceCode default"><em>spawn-future-sender</em></code> that represents an eagerly running task. This involves an allocation for the <code class="sourceCode default"><em>operation-state</em></code> of the sender, until it completes, and synchronization to resolve the race between the production of the result and the consumption of the result.</p>
 <p>This is similar to <code class="sourceCode default">ensure_started()</code> from <span class="citation" data-cites="P2300R5">[<a href="#ref-P2300R5" role="doc-biblioref">P2300R5</a>]</span>, but we keep track of the lifetime of the given work.</p>
 <p>Unlike <code class="sourceCode default">spawn()</code>, the sender given to <code class="sourceCode default">spawn_future()</code> is not constrained on a given shape. It may send different types of values, and it can complete with errors.</p>
@@ -803,17 +825,17 @@ code.sourceCode > span { display: inline; }
 <p>Cancelling the returned sender, cancels <code class="sourceCode default">s</code> but does not cancel the <code class="sourceCode default">async_scope</code>.</p>
 <p>If the given sender <code class="sourceCode default">s</code> completes with an error, but the returned sender is dropped, the error is dropped too.</p>
 <p>Usage example:</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
-<span id="cb11-2"><a href="#cb11-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
-<span id="cb11-3"><a href="#cb11-3"></a>async_scope s;</span>
-<span id="cb11-4"><a href="#cb11-4"></a><span class="op">...</span></span>
-<span id="cb11-5"><a href="#cb11-5"></a>sender <span class="kw">auto</span> snd <span class="op">=</span> s<span class="op">.</span>spawn_future<span class="op">(</span>on<span class="op">(</span>sched, key_work<span class="op">()))</span></span>
-<span id="cb11-6"><a href="#cb11-6"></a>                <span class="op">|</span> then<span class="op">(</span>continue_fun<span class="op">)</span>;</span>
-<span id="cb11-7"><a href="#cb11-7"></a><span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">10</span>; i<span class="op">++)</span></span>
-<span id="cb11-8"><a href="#cb11-8"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, other_work<span class="op">(</span>i<span class="op">)))</span>;</span>
-<span id="cb11-9"><a href="#cb11-9"></a><span class="cf">return</span> when_all<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">()</span>, std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
+<span id="cb12-3"><a href="#cb12-3"></a>async_scope s;</span>
+<span id="cb12-4"><a href="#cb12-4"></a><span class="op">...</span></span>
+<span id="cb12-5"><a href="#cb12-5"></a>sender <span class="kw">auto</span> snd <span class="op">=</span> s<span class="op">.</span>spawn_future<span class="op">(</span>on<span class="op">(</span>sched, key_work<span class="op">()))</span></span>
+<span id="cb12-6"><a href="#cb12-6"></a>                <span class="op">|</span> then<span class="op">(</span>continue_fun<span class="op">)</span>;</span>
+<span id="cb12-7"><a href="#cb12-7"></a><span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">10</span>; i<span class="op">++)</span></span>
+<span id="cb12-8"><a href="#cb12-8"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, other_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb12-9"><a href="#cb12-9"></a><span class="cf">return</span> when_all<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">()</span>, std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>;</span></code></pre></div>
 <h2 data-number="5.5" id="nest"><span class="header-section-number">5.5</span> <code class="sourceCode default">nest()</code><a href="#nest" class="self-link"></a></h2>
-<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
 <p>Returns a <code class="sourceCode default"><em>nest-sender</em></code> that, when started, extends the lifetime of the <code class="sourceCode default">async_scope</code> that produced it to include the lifetime of the <code class="sourceCode default"><em>nest-sender</em></code> object and the lifetime of the given sender operation.</p>
 <p>A call to <code class="sourceCode default">nest()</code> does not start the given sender. A call to <code class="sourceCode default">nest()</code> is not expected to incur allocations.</p>
 <p>The sender returned by a call to <code class="sourceCode default">nest()</code> holds a reference to the <code class="sourceCode default">async_scope</code>. Connecting and starting the sender returned from <code class="sourceCode default">nest()</code> will connect and start the input sender and will extend the <code class="sourceCode default">async_scope</code>’s lifetime to include the <code class="sourceCode default"><em>nest-sender</em></code> and given sender operation.</p>
@@ -823,64 +845,64 @@ code.sourceCode > span { display: inline; }
 <p>One can say that <code class="sourceCode default">nest()</code> is more fundamental than <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> as the latter two can be implemented in terms of <code class="sourceCode default">nest()</code>. In terms of performance, <code class="sourceCode default">nest()</code> does not introduce any penalty. <code class="sourceCode default">spawn()</code> is more expensive than <code class="sourceCode default">nest()</code> as it needs to allocate memory for the operation. <code class="sourceCode default">spawn_future()</code> is even more expensive than <code class="sourceCode default">spawn()</code>; the receiver needs to be type-erased and a possible race condition needs to be avoided. <code class="sourceCode default">nest()</code> does not require allocations, so it can be used in a free-standing environment.</p>
 <p>Cancelling the returned sender, once it is connected and started, cancels <code class="sourceCode default">s</code> but does not cancel the <code class="sourceCode default">async_scope</code>.</p>
 <p>Usage example:</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
-<span id="cb13-2"><a href="#cb13-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
-<span id="cb13-3"><a href="#cb13-3"></a>async_scope s;</span>
-<span id="cb13-4"><a href="#cb13-4"></a><span class="op">...</span></span>
-<span id="cb13-5"><a href="#cb13-5"></a>sender <span class="kw">auto</span> snd <span class="op">=</span> s<span class="op">.</span>nest<span class="op">(</span>key_work<span class="op">())</span>;</span>
-<span id="cb13-6"><a href="#cb13-6"></a><span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">10</span>; i<span class="op">++)</span></span>
-<span id="cb13-7"><a href="#cb13-7"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, other_work<span class="op">(</span>i<span class="op">)))</span>;</span>
-<span id="cb13-8"><a href="#cb13-8"></a><span class="co">// will deadlock: this_thread::sync_wait(s.on_empty());</span></span>
-<span id="cb13-9"><a href="#cb13-9"></a><span class="cf">return</span> when_all<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">()</span>, std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>; <span class="co">// OK, completing snd will also complete s.on_empty()</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1"></a><span class="co">// the 2 variables outlive the code below</span></span>
+<span id="cb14-2"><a href="#cb14-2"></a>scheduler <span class="kw">auto</span> sched <span class="op">=</span> <span class="op">...</span>;</span>
+<span id="cb14-3"><a href="#cb14-3"></a>async_scope s;</span>
+<span id="cb14-4"><a href="#cb14-4"></a><span class="op">...</span></span>
+<span id="cb14-5"><a href="#cb14-5"></a>sender <span class="kw">auto</span> snd <span class="op">=</span> s<span class="op">.</span>nest<span class="op">(</span>key_work<span class="op">())</span>;</span>
+<span id="cb14-6"><a href="#cb14-6"></a><span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span><span class="dv">10</span>; i<span class="op">++)</span></span>
+<span id="cb14-7"><a href="#cb14-7"></a>    s<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, other_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb14-8"><a href="#cb14-8"></a><span class="co">// will deadlock: this_thread::sync_wait(s.on_empty());</span></span>
+<span id="cb14-9"><a href="#cb14-9"></a><span class="cf">return</span> when_all<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">()</span>, std<span class="op">::</span>move<span class="op">(</span>snd<span class="op">))</span>; <span class="co">// OK, completing snd will also complete s.on_empty()</span></span></code></pre></div>
 <h2 data-number="5.6" id="empty-detection"><span class="header-section-number">5.6</span> Empty detection<a href="#empty-detection" class="self-link"></a></h2>
-<div class="sourceCode" id="cb14"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <em>on-empty-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> when_empty<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1"></a><span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span> <em>on-empty-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> when_empty<span class="op">(</span>S<span class="op">&amp;&amp;</span> s<span class="op">)</span>;</span></code></pre></div>
 <p>An <code class="sourceCode default">async_scope</code> object is considered to be <em>non-empty</em> when there are spawned senders that haven’t completed yet, or there are senders created with <code class="sourceCode default">async_scope</code> that are in flight. The object is considered <em>empty</em> otherwise. An <code class="sourceCode default">async_scope</code> can be <em>empty</em> more than once.</p>
 <p><code class="sourceCode default"><em>on-empty-sender</em></code> starts the given sender when the <code class="sourceCode default">async_scope</code> object becomes <em>empty</em> and completes when the given sender completes. This can be used to run async cleanup for the resources used by the spawned senders.</p>
 <p>The intended usage is to spawn all the senders and then start the <code class="sourceCode default"><em>on-empty-sender</em></code> to know when all spawned senders have completed.</p>
 <p>If the <code class="sourceCode default">async_scope</code> object is requested to stop, the returned <code class="sourceCode default"><em>on-empty-sender</em></code> is not cancelled. This ensures that the <code class="sourceCode default">async_scope</code> is not reported as empty until all active senders complete after a stop is requested to the <code class="sourceCode default">async_scope</code> object.</p>
 <p>To safely destroy the <code class="sourceCode default">async_scope</code> object it’s recommended to use <code class="sourceCode default"><em>on-empty-sender</em></code> to get notified when the scope object finished executing all the work. Moreover, after starting <code class="sourceCode default"><em>on-empty-sender</em></code> for the purpose of detecting when it is safe to destroy an <code class="sourceCode default">async_scope</code>, all calls <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> must <em>happen_before</em> the <code class="sourceCode default"><em>on-empty-sender</em></code> was started.</p>
 <p>That is to say that the following is safe:</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1"></a><span class="op">{</span></span>
-<span id="cb15-2"><a href="#cb15-2"></a>  async_scope s;</span>
-<span id="cb15-3"><a href="#cb15-3"></a>  s<span class="op">.</span>spawn<span class="op">(</span>snd<span class="op">)</span>;</span>
-<span id="cb15-4"><a href="#cb15-4"></a>  sync_wait<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">())</span>;</span>
-<span id="cb15-5"><a href="#cb15-5"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1"></a><span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2"></a>  async_scope s;</span>
+<span id="cb16-3"><a href="#cb16-3"></a>  s<span class="op">.</span>spawn<span class="op">(</span>snd<span class="op">)</span>;</span>
+<span id="cb16-4"><a href="#cb16-4"></a>  sync_wait<span class="op">(</span>s<span class="op">.</span>on_empty<span class="op">())</span>;</span>
+<span id="cb16-5"><a href="#cb16-5"></a><span class="op">}</span></span></code></pre></div>
 <p>Usage example:</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1"></a>sender <span class="kw">auto</span> run_in_parallel<span class="op">(</span><span class="dt">int</span> num_jobs, async_scope<span class="op">&amp;</span> scope, scheduler <span class="kw">auto</span><span class="op">&amp;</span> sched<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb16-2"><a href="#cb16-2"></a>  <span class="co">// Create parallel work</span></span>
-<span id="cb16-3"><a href="#cb16-3"></a>  <span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span>num_jobs; i<span class="op">++</span> <span class="op">)</span></span>
-<span id="cb16-4"><a href="#cb16-4"></a>    scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
-<span id="cb16-5"><a href="#cb16-5"></a>  <span class="co">// Join the work with the help of the scope</span></span>
-<span id="cb16-6"><a href="#cb16-6"></a>  <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
-<span id="cb16-7"><a href="#cb16-7"></a><span class="op">}</span></span></code></pre></div>
-<div class="sourceCode" id="cb17"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1"></a><em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1"></a>sender <span class="kw">auto</span> run_in_parallel<span class="op">(</span><span class="dt">int</span> num_jobs, async_scope<span class="op">&amp;</span> scope, scheduler <span class="kw">auto</span><span class="op">&amp;</span> sched<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-2"><a href="#cb17-2"></a>  <span class="co">// Create parallel work</span></span>
+<span id="cb17-3"><a href="#cb17-3"></a>  <span class="cf">for</span> <span class="op">(</span> <span class="dt">int</span> i<span class="op">=</span><span class="dv">0</span>; i<span class="op">&lt;</span>num_jobs; i<span class="op">++</span> <span class="op">)</span></span>
+<span id="cb17-4"><a href="#cb17-4"></a>    scope<span class="op">.</span>spawn<span class="op">(</span>on<span class="op">(</span>sched, some_work<span class="op">(</span>i<span class="op">)))</span>;</span>
+<span id="cb17-5"><a href="#cb17-5"></a>  <span class="co">// Join the work with the help of the scope</span></span>
+<span id="cb17-6"><a href="#cb17-6"></a>  <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb17-7"><a href="#cb17-7"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1"></a><em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span></code></pre></div>
 <p>Equivalent to calling <code class="sourceCode default">when_empty(just())</code></p>
 <h2 data-number="5.7" id="stopping-async_scope"><span class="header-section-number">5.7</span> Stopping <code class="sourceCode default">async_scope</code><a href="#stopping-async_scope" class="self-link"></a></h2>
-<div class="sourceCode" id="cb18"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1"></a>in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1"></a>in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span></code></pre></div>
 <p>Returns a <code class="sourceCode default">in_place_stop_source</code> associated with the <code class="sourceCode default">async_scope</code>’s <code class="sourceCode default">stop_token</code>. This <code class="sourceCode default">in_place_stop_source</code> will trigger the <code class="sourceCode default">in_place_stop_token</code>, and will cause future calls to <code class="sourceCode default">nest()</code>, <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code> to start with a <code class="sourceCode default">in_place_stop_token</code> that is already in the <code class="sourceCode default">stop_requested()</code> state.</p>
 <p>Calling <code class="sourceCode default">request_stop</code> on the returned <code class="sourceCode default">stop_source</code> will forward that request to all the nested and spawned senders.</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1"></a>in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1"></a>in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span></code></pre></div>
 <p>Equivalent to calling <code class="sourceCode default">get_stop_source().get_token()</code>.</p>
 <p>Returns the <code class="sourceCode default">in_place_stop_token</code> associated with the <code class="sourceCode default">async_scope</code>. This will report stopped when the <code class="sourceCode default">stop_source</code> is stopped or <code class="sourceCode default">request_stop()</code> is called. The <code class="sourceCode default">in_place_stop_token</code> is provided to all nested and spawned senders so that they are able to respond to a stop request.</p>
-<div class="sourceCode" id="cb20"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1"></a><span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1"></a><span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span></code></pre></div>
 <p>Equivalent to calling <code class="sourceCode default">get_stop_source().request_stop()</code>.</p>
 <p>Usage example:</p>
-<div class="sourceCode" id="cb21"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb21-2"><a href="#cb21-2"></a>    async_scope scope;</span>
-<span id="cb21-3"><a href="#cb21-3"></a>    sender <span class="kw">auto</span> program <span class="op">=</span> program_work<span class="op">(</span>scope<span class="op">)</span>;</span>
-<span id="cb21-4"><a href="#cb21-4"></a>    sender <span class="kw">auto</span> program_with_termination</span>
-<span id="cb21-5"><a href="#cb21-5"></a>        <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>program<span class="op">)</span></span>
-<span id="cb21-6"><a href="#cb21-6"></a>        <span class="co">// Ensure we don&#39;t run any dynamic tasks before exiting</span></span>
-<span id="cb21-7"><a href="#cb21-7"></a>        <span class="co">// and wait for ongoing work to complete</span></span>
-<span id="cb21-8"><a href="#cb21-8"></a>        <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
-<span id="cb21-9"><a href="#cb21-9"></a>            scope<span class="op">.</span>request_stop<span class="op">()</span>;</span>
-<span id="cb21-10"><a href="#cb21-10"></a>            <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
-<span id="cb21-11"><a href="#cb21-11"></a>        <span class="op">})</span></span>
-<span id="cb21-12"><a href="#cb21-12"></a>        ;</span>
-<span id="cb21-13"><a href="#cb21-13"></a>    this_thread<span class="op">::</span>sync_wait<span class="op">(</span>program_with_termination<span class="op">)</span>;</span>
-<span id="cb21-14"><a href="#cb21-14"></a>    <span class="co">// all work, static or dynamic is completed at this point</span></span>
-<span id="cb21-15"><a href="#cb21-15"></a>    <span class="cf">return</span> <span class="dv">0</span>;</span>
-<span id="cb21-16"><a href="#cb21-16"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb22-1"><a href="#cb22-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb22-2"><a href="#cb22-2"></a>    async_scope scope;</span>
+<span id="cb22-3"><a href="#cb22-3"></a>    sender <span class="kw">auto</span> program <span class="op">=</span> program_work<span class="op">(</span>scope<span class="op">)</span>;</span>
+<span id="cb22-4"><a href="#cb22-4"></a>    sender <span class="kw">auto</span> program_with_termination</span>
+<span id="cb22-5"><a href="#cb22-5"></a>        <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>program<span class="op">)</span></span>
+<span id="cb22-6"><a href="#cb22-6"></a>        <span class="co">// Ensure we don&#39;t run any dynamic tasks before exiting</span></span>
+<span id="cb22-7"><a href="#cb22-7"></a>        <span class="co">// and wait for ongoing work to complete</span></span>
+<span id="cb22-8"><a href="#cb22-8"></a>        <span class="op">|</span> let_value<span class="op">([&amp;]{</span></span>
+<span id="cb22-9"><a href="#cb22-9"></a>            scope<span class="op">.</span>request_stop<span class="op">()</span>;</span>
+<span id="cb22-10"><a href="#cb22-10"></a>            <span class="cf">return</span> scope<span class="op">.</span>on_empty<span class="op">()</span>;</span>
+<span id="cb22-11"><a href="#cb22-11"></a>        <span class="op">})</span></span>
+<span id="cb22-12"><a href="#cb22-12"></a>        ;</span>
+<span id="cb22-13"><a href="#cb22-13"></a>    this_thread<span class="op">::</span>sync_wait<span class="op">(</span>program_with_termination<span class="op">)</span>;</span>
+<span id="cb22-14"><a href="#cb22-14"></a>    <span class="co">// all work, static or dynamic is completed at this point</span></span>
+<span id="cb22-15"><a href="#cb22-15"></a>    <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb22-16"><a href="#cb22-16"></a><span class="op">}</span></span></code></pre></div>
 <h1 data-number="6" id="design-considerations"><span class="header-section-number">6</span> Design considerations<a href="#design-considerations" class="self-link"></a></h1>
 <h2 data-number="6.1" id="shape-of-async_scope"><span class="header-section-number">6.1</span> Shape of <code class="sourceCode default">async_scope</code><a href="#shape-of-async_scope" class="self-link"></a></h2>
 <h3 data-number="6.1.1" id="concept-vs-type"><span class="header-section-number">6.1.1</span> Concept vs type<a href="#concept-vs-type" class="self-link"></a></h3>
@@ -964,17 +986,17 @@ code.sourceCode > span { display: inline; }
 <p>In its most basic form the interface <code class="sourceCode default">async_scope</code> applies to other concurrent abstractions. This implies that it is useful to think of this interface in a larger context. If the interface is fit for the other purposes, it may be an indication that we have the right interface and that we should add a concept for that interface.</p>
 <p>Let us consider a concurrent abstraction that will serialize dynamic work provided to it. That is, if try to start multiple operations at the same time, only one is executed at a given time; the other ones are queued and will be executed whenever the previous operations complete.</p>
 <p>An interface to this abstraction might look like the following:</p>
-<div class="sourceCode" id="cb22"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb22-1"><a href="#cb22-1"></a><span class="kw">struct</span> async_mutex <span class="op">{</span></span>
-<span id="cb22-2"><a href="#cb22-2"></a>    async_mutex<span class="op">()</span>;</span>
-<span id="cb22-3"><a href="#cb22-3"></a>    <span class="op">~</span>async_mutex<span class="op">()</span>;</span>
-<span id="cb22-4"><a href="#cb22-4"></a>    async_mutex<span class="op">(</span><span class="kw">const</span> async_mutex<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb22-5"><a href="#cb22-5"></a>    async_mutex<span class="op">(</span>async_mutex<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb22-6"><a href="#cb22-6"></a>    async_mutex<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> async_mutex<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb22-7"><a href="#cb22-7"></a>    async_mutex<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>async_mutex<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb22-8"><a href="#cb22-8"></a></span>
-<span id="cb22-9"><a href="#cb22-9"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
-<span id="cb22-10"><a href="#cb22-10"></a>    <em>lock-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> lock<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
-<span id="cb22-11"><a href="#cb22-11"></a><span class="op">}</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb23-1"><a href="#cb23-1"></a><span class="kw">struct</span> async_mutex <span class="op">{</span></span>
+<span id="cb23-2"><a href="#cb23-2"></a>    async_mutex<span class="op">()</span>;</span>
+<span id="cb23-3"><a href="#cb23-3"></a>    <span class="op">~</span>async_mutex<span class="op">()</span>;</span>
+<span id="cb23-4"><a href="#cb23-4"></a>    async_mutex<span class="op">(</span><span class="kw">const</span> async_mutex<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb23-5"><a href="#cb23-5"></a>    async_mutex<span class="op">(</span>async_mutex<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb23-6"><a href="#cb23-6"></a>    async_mutex<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> async_mutex<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb23-7"><a href="#cb23-7"></a>    async_mutex<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>async_mutex<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb23-8"><a href="#cb23-8"></a></span>
+<span id="cb23-9"><a href="#cb23-9"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb23-10"><a href="#cb23-10"></a>    <em>lock-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> lock<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb23-11"><a href="#cb23-11"></a><span class="op">}</span>;</span></code></pre></div>
 <p>One can add a sender in the context of the <code class="sourceCode default">async_mutex</code> by passing it to <code class="sourceCode default">lock()</code>. Starting the sender returned from <code class="sourceCode default">lock()</code> will add the given sender to the queue waiting for the lock. One might want to add some work that needs to be executed in the <code class="sourceCode default">async_mutex</code>, then continue with some other work outside the <code class="sourceCode default">async_mutex</code>. One might want to wait until the <code class="sourceCode default">async_mutex</code> is drained, or might want to stop processing any work in the <code class="sourceCode default">async_mutex</code>. All of these can be fulfilled by composing <code class="sourceCode default">async_mutex</code> and <code class="sourceCode default">async_scope</code>. <code class="sourceCode default">async_scope::nest()</code> is the same basis operation as <code class="sourceCode default">async_mutex::lock</code>. If a name that would work for both <code class="sourceCode default">nest()</code> and <code class="sourceCode default">lock()</code> was used, then this would be the basis function for a new concept.</p>
 <p>Similar to this abstraction, one might imagine abstractions that can execute maximum <em>N</em> concurrent work items, or abstractions that execute work based on given labels, or abstractions that execute work based on dynamic priorities, etc. All of these can be obtained by using an interface similar to the one we have for <code class="sourceCode default">async_scope</code>, maybe with some extra arguments.</p>
 <p>This provides a strong indication that the API for <code class="sourceCode default">async_scope</code> is appropriate.</p>
@@ -984,9 +1006,9 @@ code.sourceCode > span { display: inline; }
 <p>The <code class="sourceCode default">spawn_future()</code> method in this paper can be used as a replacement for <code class="sourceCode default">ensure_started</code> proposed in <span class="citation" data-cites="P2300R5">[<a href="#ref-P2300R5" role="doc-biblioref">P2300R5</a>]</span>. Essentially it does the same thing, but it can also scope the lifetime of the spawned work.</p>
 <h2 data-number="6.7" id="supporting-the-pipe-operator"><span class="header-section-number">6.7</span> Supporting the pipe operator<a href="#supporting-the-pipe-operator" class="self-link"></a></h2>
 <p>This paper doesn’t support the pipe operator to be used in conjunction with <code class="sourceCode default">spawn()</code> and <code class="sourceCode default">spawn_future()</code>. One might think that it is useful to write code like the following:</p>
-<div class="sourceCode" id="cb23"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb23-1"><a href="#cb23-1"></a>async_scope s;</span>
-<span id="cb23-2"><a href="#cb23-2"></a>std<span class="op">::</span>move<span class="op">(</span>snd1<span class="op">)</span> <span class="op">|</span> s<span class="op">.</span>spawn<span class="op">()</span>; <span class="co">// returns void</span></span>
-<span id="cb23-3"><a href="#cb23-3"></a>sender <span class="kw">auto</span> s <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>snd2<span class="op">)</span> <span class="op">|</span> s<span class="op">.</span>spawn_future<span class="op">()</span> <span class="op">|</span> then<span class="op">(...)</span>;</span></code></pre></div>
+<div class="sourceCode" id="cb24"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb24-1"><a href="#cb24-1"></a>async_scope s;</span>
+<span id="cb24-2"><a href="#cb24-2"></a>std<span class="op">::</span>move<span class="op">(</span>snd1<span class="op">)</span> <span class="op">|</span> s<span class="op">.</span>spawn<span class="op">()</span>; <span class="co">// returns void</span></span>
+<span id="cb24-3"><a href="#cb24-3"></a>sender <span class="kw">auto</span> s <span class="op">=</span> std<span class="op">::</span>move<span class="op">(</span>snd2<span class="op">)</span> <span class="op">|</span> s<span class="op">.</span>spawn_future<span class="op">()</span> <span class="op">|</span> then<span class="op">(...)</span>;</span></code></pre></div>
 <p>In <span class="citation" data-cites="P2300R5">[<a href="#ref-P2300R5" role="doc-biblioref">P2300R5</a>]</span> sender consumers do not have support for the pipe operator. As <code class="sourceCode default">spawn()</code> works similarly to <code class="sourceCode default">start_detached()</code> from <span class="citation" data-cites="P2300R5">[<a href="#ref-P2300R5" role="doc-biblioref">P2300R5</a>]</span>, which is a sender consumer, if we follow the same rationale, it makes sense not to support the pipe operator for <code class="sourceCode default">spawn()</code>.</p>
 <p>On the other hand, <code class="sourceCode default">spawn_future()</code> is not a sender consumer, thus we might have considered adding pipe operator to it. To keep consistency with <code class="sourceCode default">spawn()</code>, at this point the paper doesn’t support pipe operator for <code class="sourceCode default">spawn_future()</code>.</p>
 <p>If <code class="sourceCode default">spawn_future()</code> was an algorithm and the <code class="sourceCode default">spawn_future()</code> method was removed from <code class="sourceCode default">async_scope</code>, then the pipe operator would be a natural and obvious fit.</p>
@@ -1038,7 +1060,7 @@ code.sourceCode > span { display: inline; }
 <h2 data-number="8.3" id="spawn-1"><span class="header-section-number">8.3</span> <code class="sourceCode default">spawn()</code><a href="#spawn-1" class="self-link"></a></h2>
 <p>This provides a way to start a sender that produces <code class="sourceCode default">void</code> and extend the lifetime of the <code class="sourceCode default">async_scope</code> to exceed the lifetime of the operation. This allocates, connects and starts the given sender.</p>
 <p>It would be good for the name to indicate that it is an expensive operation.</p>
-<p>alternatives: <code class="sourceCode default">start()</code>, <code class="sourceCode default">submit()</code>, <code class="sourceCode default">enqueue()</code>, <code class="sourceCode default">do()</code>, <code class="sourceCode default">run()</code></p>
+<p>alternatives: <code class="sourceCode default">start()</code>, <code class="sourceCode default">submit()</code>, <code class="sourceCode default">enqueue()</code>, <code class="sourceCode default">run()</code></p>
 <h2 data-number="8.4" id="spawn_future-1"><span class="header-section-number">8.4</span> <code class="sourceCode default">spawn_future()</code><a href="#spawn_future-1" class="self-link"></a></h2>
 <p>This provides a way to start work and later ask for the result. This will allocate, connect, start and resolve the race (using synchronization primitives) between the completion of the given sender and the start of the returned sender. Since the type of the receiver supplied to the result sender is not known when the given sender starts, the receiver will be type-erased when it is connected.</p>
 <p>It would be good for the name to be ugly, to indicate that it is a very expensive operation.</p>
@@ -1128,50 +1150,50 @@ code.sourceCode > span { display: inline; }
 </table>
 <h1 data-number="9" id="specification"><span class="header-section-number">9</span> Specification<a href="#specification" class="self-link"></a></h1>
 <h2 data-number="9.1" id="synopsis"><span class="header-section-number">9.1</span> Synopsis<a href="#synopsis" class="self-link"></a></h2>
-<div class="sourceCode" id="cb24"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb24-1"><a href="#cb24-1"></a><span class="kw">namespace</span> std<span class="op">::</span>execution <span class="op">{</span></span>
-<span id="cb24-2"><a href="#cb24-2"></a></span>
-<span id="cb24-3"><a href="#cb24-3"></a><span class="kw">namespace</span> <span class="op">{</span> <span class="co">// <em>exposition-only</em></span></span>
-<span id="cb24-4"><a href="#cb24-4"></a>    <span class="kw">struct</span> <em>spawn-receiver</em> <span class="op">{</span> <span class="co">// <em>exposition-only</em></span></span>
-<span id="cb24-5"><a href="#cb24-5"></a>        <span class="kw">friend</span> <span class="dt">void</span> set_value<span class="op">(</span><em>spawn-receiver</em><span class="op">)</span> <span class="kw">noexcept</span>;</span>
-<span id="cb24-6"><a href="#cb24-6"></a>        <span class="kw">friend</span> <span class="dt">void</span> set_stopped<span class="op">(</span><em>spawn-receiver</em><span class="op">)</span> <span class="kw">noexcept</span>;</span>
-<span id="cb24-7"><a href="#cb24-7"></a>    <span class="op">}</span>;</span>
-<span id="cb24-8"><a href="#cb24-8"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> S<span class="op">&gt;</span></span>
-<span id="cb24-9"><a href="#cb24-9"></a>    <span class="kw">struct</span> <em>nest-sender</em>; <span class="co">// <em>exposition-only</em></span></span>
-<span id="cb24-10"><a href="#cb24-10"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> S<span class="op">&gt;</span></span>
-<span id="cb24-11"><a href="#cb24-11"></a>    <span class="kw">struct</span> <em>spawn-future-sender</em>; <span class="co">// <em>exposition-only</em></span></span>
-<span id="cb24-12"><a href="#cb24-12"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> S<span class="op">&gt;</span></span>
-<span id="cb24-13"><a href="#cb24-13"></a>    <span class="kw">struct</span> <em>on-empty-sender</em>; <span class="co">// <em>exposition-only</em></span></span>
-<span id="cb24-14"><a href="#cb24-14"></a><span class="op">}</span></span>
-<span id="cb24-15"><a href="#cb24-15"></a></span>
-<span id="cb24-16"><a href="#cb24-16"></a><span class="kw">struct</span> async_scope <span class="op">{</span></span>
-<span id="cb24-17"><a href="#cb24-17"></a>    async_scope<span class="op">()</span>;</span>
-<span id="cb24-18"><a href="#cb24-18"></a>    <span class="op">~</span>async_scope<span class="op">()</span>;</span>
-<span id="cb24-19"><a href="#cb24-19"></a>    async_scope<span class="op">(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb24-20"><a href="#cb24-20"></a>    async_scope<span class="op">(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb24-21"><a href="#cb24-21"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb24-22"><a href="#cb24-22"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
-<span id="cb24-23"><a href="#cb24-23"></a></span>
-<span id="cb24-24"><a href="#cb24-24"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span></span>
-<span id="cb24-25"><a href="#cb24-25"></a>    <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
-<span id="cb24-26"><a href="#cb24-26"></a></span>
-<span id="cb24-27"><a href="#cb24-27"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
-<span id="cb24-28"><a href="#cb24-28"></a>    <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
-<span id="cb24-29"><a href="#cb24-29"></a></span>
-<span id="cb24-30"><a href="#cb24-30"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
-<span id="cb24-31"><a href="#cb24-31"></a>    <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
-<span id="cb24-32"><a href="#cb24-32"></a></span>
-<span id="cb24-33"><a href="#cb24-33"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
-<span id="cb24-34"><a href="#cb24-34"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
-<span id="cb24-35"><a href="#cb24-35"></a>    <em>on-empty-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> when_empty<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
-<span id="cb24-36"><a href="#cb24-36"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
-<span id="cb24-37"><a href="#cb24-37"></a>    <em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
-<span id="cb24-38"><a href="#cb24-38"></a></span>
-<span id="cb24-39"><a href="#cb24-39"></a>    in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span>
-<span id="cb24-40"><a href="#cb24-40"></a>    in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
-<span id="cb24-41"><a href="#cb24-41"></a>    <span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span>
-<span id="cb24-42"><a href="#cb24-42"></a><span class="op">}</span>;</span>
-<span id="cb24-43"><a href="#cb24-43"></a></span>
-<span id="cb24-44"><a href="#cb24-44"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb25"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb25-1"><a href="#cb25-1"></a><span class="kw">namespace</span> std<span class="op">::</span>execution <span class="op">{</span></span>
+<span id="cb25-2"><a href="#cb25-2"></a></span>
+<span id="cb25-3"><a href="#cb25-3"></a><span class="kw">namespace</span> <span class="op">{</span> <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb25-4"><a href="#cb25-4"></a>    <span class="kw">struct</span> <em>spawn-receiver</em> <span class="op">{</span> <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb25-5"><a href="#cb25-5"></a>        <span class="kw">friend</span> <span class="dt">void</span> set_value<span class="op">(</span><em>spawn-receiver</em><span class="op">)</span> <span class="kw">noexcept</span>;</span>
+<span id="cb25-6"><a href="#cb25-6"></a>        <span class="kw">friend</span> <span class="dt">void</span> set_stopped<span class="op">(</span><em>spawn-receiver</em><span class="op">)</span> <span class="kw">noexcept</span>;</span>
+<span id="cb25-7"><a href="#cb25-7"></a>    <span class="op">}</span>;</span>
+<span id="cb25-8"><a href="#cb25-8"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> S<span class="op">&gt;</span></span>
+<span id="cb25-9"><a href="#cb25-9"></a>    <span class="kw">struct</span> <em>nest-sender</em>; <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb25-10"><a href="#cb25-10"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> S<span class="op">&gt;</span></span>
+<span id="cb25-11"><a href="#cb25-11"></a>    <span class="kw">struct</span> <em>spawn-future-sender</em>; <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb25-12"><a href="#cb25-12"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> S<span class="op">&gt;</span></span>
+<span id="cb25-13"><a href="#cb25-13"></a>    <span class="kw">struct</span> <em>on-empty-sender</em>; <span class="co">// <em>exposition-only</em></span></span>
+<span id="cb25-14"><a href="#cb25-14"></a><span class="op">}</span></span>
+<span id="cb25-15"><a href="#cb25-15"></a></span>
+<span id="cb25-16"><a href="#cb25-16"></a><span class="kw">struct</span> async_scope <span class="op">{</span></span>
+<span id="cb25-17"><a href="#cb25-17"></a>    async_scope<span class="op">()</span>;</span>
+<span id="cb25-18"><a href="#cb25-18"></a>    <span class="op">~</span>async_scope<span class="op">()</span>;</span>
+<span id="cb25-19"><a href="#cb25-19"></a>    async_scope<span class="op">(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb25-20"><a href="#cb25-20"></a>    async_scope<span class="op">(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb25-21"><a href="#cb25-21"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="kw">const</span> async_scope<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb25-22"><a href="#cb25-22"></a>    async_scope<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>async_scope<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="kw">delete</span>;</span>
+<span id="cb25-23"><a href="#cb25-23"></a></span>
+<span id="cb25-24"><a href="#cb25-24"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender_to<span class="op">&lt;</span><em>spawn-receiver</em><span class="op">&gt;</span> S<span class="op">&gt;</span></span>
+<span id="cb25-25"><a href="#cb25-25"></a>    <span class="dt">void</span> spawn<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb25-26"><a href="#cb25-26"></a></span>
+<span id="cb25-27"><a href="#cb25-27"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb25-28"><a href="#cb25-28"></a>    <em>spawn-future-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> spawn_future<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb25-29"><a href="#cb25-29"></a></span>
+<span id="cb25-30"><a href="#cb25-30"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb25-31"><a href="#cb25-31"></a>    <em>nest-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> nest<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb25-32"><a href="#cb25-32"></a></span>
+<span id="cb25-33"><a href="#cb25-33"></a>    <span class="kw">template</span> <span class="op">&lt;</span>sender S<span class="op">&gt;</span></span>
+<span id="cb25-34"><a href="#cb25-34"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
+<span id="cb25-35"><a href="#cb25-35"></a>    <em>on-empty-sender</em><span class="op">&lt;</span>S<span class="op">&gt;</span> when_empty<span class="op">(</span>S<span class="op">&amp;&amp;</span> snd<span class="op">)</span>;</span>
+<span id="cb25-36"><a href="#cb25-36"></a>    <span class="op">[[</span><span class="at">nodiscard</span><span class="op">]]</span></span>
+<span id="cb25-37"><a href="#cb25-37"></a>    <em>on-empty-sender</em> on_empty<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb25-38"><a href="#cb25-38"></a></span>
+<span id="cb25-39"><a href="#cb25-39"></a>    in_place_stop_source<span class="op">&amp;</span> get_stop_source<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb25-40"><a href="#cb25-40"></a>    in_place_stop_token get_stop_token<span class="op">()</span> <span class="kw">const</span> <span class="kw">noexcept</span>;</span>
+<span id="cb25-41"><a href="#cb25-41"></a>    <span class="dt">void</span> request_stop<span class="op">()</span> <span class="kw">noexcept</span>;</span>
+<span id="cb25-42"><a href="#cb25-42"></a><span class="op">}</span>;</span>
+<span id="cb25-43"><a href="#cb25-43"></a></span>
+<span id="cb25-44"><a href="#cb25-44"></a><span class="op">}</span></span></code></pre></div>
 <h2 data-number="9.2" id="async_scopeasync_scope"><span class="header-section-number">9.2</span> <code class="sourceCode default">async_scope::async_scope</code><a href="#async_scopeasync_scope" class="self-link"></a></h2>
 <ol type="1">
 <li><code class="sourceCode default">async_scope::async_scope</code> constructs the <code class="sourceCode default">async_scope</code> object, in the empty state.</li>
