@@ -144,7 +144,7 @@ using namespace std::execution;
 system_context ctx;
 int result = 0;
 
-{
+int main() {
   async_scope scope;
   scheduler auto sch = ctx.scheduler();
 
@@ -169,12 +169,37 @@ int result = 0;
 
   // Safely wait for all nested work
   this_thread::sync_wait(scope.on_empty());
+
+  std::cout << "Result: " << result << "\n";
 }
 
 // The scope ensured that all work is safely joined, so result contains 13
-std::cout << "Result: " << result << "\n";
 
 // and destruction of the context is now safe
+```
+
+## Starting work nested within a framework
+In this example we use the `async_scope` within a class to start work when the object receives a message and to wait for that work to complete before closing.
+`my_window::start()` starts the sender using storage reserved in `my_window` for this purpose.
+```c++
+using namespace std::execution;
+
+class my_window {
+  //..
+  system_context ctx;
+  scheduler auto sch{ctx.scheduler()};
+  async_scope scope{};
+};
+
+sender auto some_work(int id);
+
+void my_window::onMyMessage(int i) {
+  this->scope.spawn(on(this->sch, some_work(i)));
+}
+
+void my_window::onClickClose() {
+  this->start(this->scope.on_empty() | then([&]{this->post(close_message{});}));
+}
 ```
 
 ## Starting parallel work
@@ -852,7 +877,7 @@ This provides a way to start a sender that produces `void` and extend the lifeti
 
 It would be good for the name to indicate that it is an expensive operation.
 
-alternatives: `start()`, `submit()`, `enqueue()`, `do()`, `run()`
+alternatives: `start()`, `submit()`, `enqueue()`, `run()`
 
 ## `spawn_future()`
 
