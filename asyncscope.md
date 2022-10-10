@@ -603,7 +603,7 @@ Design considerations
 
 ### Concept vs type
 
-One option is to have a `async_scope` concept that has many implementations.
+One option is to have an `async_scope` concept that has many implementations.
 
 Another option is to have a type that has one implementation per library vendor.
 
@@ -637,6 +637,20 @@ One option is to define Customization Point Objects for `nest`, `spawn`, `spawn_
 Another option is to define a type with `nest`, `spawn`, `spawn_future` and `when_empty` methods.
 
 > **Chosen:** methods on a type.
+
+### Phased types vs Mono type
+
+One option would be for `async_scope` to have:
+
+- `template <sender S>@_nest-sender_@<S> nest(S&&)`
+
+and add `async_scope_token`. `async_scope_token` would consume an `async_scope` in its constructor. Transitioning an `async_scope` to an `async_scope_token` would end the nesting phase and begin the completion phase. The `async_scope_token` would have:
+
+- `template <sender S>@_empty-sender_@<S> when_empty(S&&)`
+
+`when_empty()` will connect and start the given sender when all the nested senders complete. 
+
+> **Chosen:** Due to time constraints, this paper proposes a Mono type.
 
 ## Shape of input senders
 
@@ -859,7 +873,9 @@ Another mental model for this is block syntax. `{}` represents the root of a set
 
 Another mental model for this is a container. This is the least accurate model. This container is a value that does not contain values. This container contains a set of active senders (an active sender is not a value, it is a state).
 
-alternatives: `sender_scope`, `dynamic_scope`, `dynamic_lifetime`, `scope`, `lifetime`
+alternatives: `sender_scope`, `sender_anchor`, `sender_nursery`
+
+rejected: `dynamic_scope`, `dynamic_lifetime`, `scope`, `lifetime`
 
 ## `nest()`
 
@@ -869,7 +885,9 @@ It would be good for the name to indicate that it is a simple operation (insert,
 
 If this becomes a basis operation for a new concept, it might be good to use a name that would also work for things like `async_mutex`. _See_ [Uses in other concurrent abstractions]
 
-alternatives: `add()`, `extend()`, `embed()`, `include()`, `constrain()`, `apply()`
+alternatives: `add()`, `extend_with()`, `adopt()`, `attach()`, `enter()`
+
+rejected: `embed()`, `include()`, `constrain()`, `apply()`
 
 ## `spawn()`
 
@@ -877,7 +895,9 @@ This provides a way to start a sender that produces `void` and extend the lifeti
 
 It would be good for the name to indicate that it is an expensive operation.
 
-alternatives: `start()`, `submit()`, `enqueue()`, `run()`
+alternatives: `start_sender()`, `connect_and_start()`
+
+rejected: `start()`, `submit()`, `enqueue()`, `run()`
 
 ## `spawn_future()`
 
@@ -898,31 +918,36 @@ The alternatives `ended`, `complete` etc.. are problematic because additional se
 
 `on_empty()` is the async version of a 'get' member function. A pattern was established a long time ago to not prefix 'get' methods on an object in `std` with `get_`. What is the current guidance? Do we want a prefix for async queries on objects in std?
 
-alternatives: `empty`, `ready`, `inactive`, `when_empty`, `when_ready`, `upon_empty`, `upon_ready`
+alternatives: `empty`, `ready`, `inactive`, `when_ready`, `upon_empty`, `upon_ready`
 
 ## table of how some alternatives might be combined
 
-+----+-----------------------+---------+------------+------------------+--------------+
-| id | comments              | nest    | spawn void | spawn w/result   | empty        |
-+:==:+:======================+:========+:===========+:=================+:=============+
-| a: | status quo            | `nest`  | `spawn`    | `spawn_future`   | `when_empty` |
-+----+-----------------------+---------+------------+------------------+--------------+
-| b: | removes confusion     | `add`   | `spawn`    | `spawn_continue` | `when_empty` |
-|    | around “future”,      |         |            |                  |              |
-|    | “empty” and "nest"    |         |            |                  |              |
-+----+-----------------------+---------+------------+------------------+--------------+
-| c: | tries to match        | `add`   | `start`    | `start_continue` | `when_empty` |
-|    | `start_detached()` in |         |            |                  |              |
-|    | [P2300R5]             |         |            |                  |              |
-+----+-----------------------+---------+------------+------------------+--------------+
-| d: | tries an alternative  | `add`   | `start`    | `start_chain`    | `when_empty` |
-|    | to using “continue”   |         |            |                  |              |
-+----+-----------------------+---------+------------+------------------+--------------+
-| e: | tries an alternative  | `extend`| `start`    | `start_result`   | `upon_ready` |
-|    | “result” and "extend" |         |            |                  |              |
-|    | and "ready"           |         |            |                  |              |
-+----+-----------------------+---------+------------+------------------+--------------+
-
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
+| id | comments              | nest            | spawn void          | spawn w/result                    | empty        |
++:==:+:======================+:================+:====================+:==================================+:=============+
+| a: | status quo            | `nest`          | `spawn`             | `spawn_future`                    | `when_empty` |
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
+| b: | removes confusion     | `add`           | `spawn`             | `spawn_continue`                  | `when_empty` |
+|    | around “future”,      |                 |                     |                                   |              |
+|    | “empty” and "nest"    |                 |                     |                                   |              |
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
+| c: | tries to match        | `add`           | `start`             | `start_continue`                  | `when_empty` |
+|    | `start_detached()` in |                 |                     |                                   |              |
+|    | [P2300R5]             |                 |                     |                                   |              |
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
+| d: | tries an alternative  | `add`           | `start`             | `start_chain`                     | `when_empty` |
+|    | to using “continue”   |                 |                     |                                   |              |
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
+| e: | tries an alternative  | `extend`        | `start`             | `start_result`                    | `upon_ready` |
+|    | “result” and "extend" |                 |                     |                                   |              |
+|    | and "ready"           |                 |                     |                                   |              |
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
+| f: | verbose `sender_scope`| `extend_with`   | `connect_and_start` | `spawn_with_result_synchronized`  | `when_empty` |
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
+| g: | `sender_anchor`       | `attach`        | `launch`            | `launch_with_result_synchronized` | `when_empty` |
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
+| h: | `sender_nursery`      | `enter`         | `spawn`             | `spawn_with_result_synchronized`  | `when_empty` |
++----+-----------------------+-----------------+---------------------+-----------------------------------+--------------+
 
 Specification
 =============
