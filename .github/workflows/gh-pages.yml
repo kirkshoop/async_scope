@@ -1,20 +1,25 @@
 name: Github Pages
 
+concurrency: 
+  group: deployment
+  cancel-in-progress: true
+
 on:
   push:
     branches:
       - main
 
 jobs:
-  deploy:
+  deployment:
     runs-on: ubuntu-latest
+    environment: deployment
     steps:
       - uses: actions/checkout@v2
         with:
           submodules: true
-      - run: 
-       - make html
-       - make pdf
+      - run: |
+          make html
+          make pdf
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         if: github.ref == 'refs/heads/main'
