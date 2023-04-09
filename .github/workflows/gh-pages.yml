@@ -24,12 +24,14 @@ jobs:
           version: 1.02
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: texinfo-tex texlive-latex-base texlive-xetex
+          packages: texlive-latex-base
           version: 1.02
       - uses: actions/checkout@v2
         with:
           submodules: true
       - run: |
+          sudo apt update
+          sudo apt install texlive-xetex
           make html
           make pdf
       - name: Deploy
