@@ -29,11 +29,19 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
-      - run: |
+      - name: install
+        run: |
           sudo apt update
           sudo apt install texlive-xetex
-          make html
-          make pdf
+
+      - name: build html
+        run: |
+          make asyncscope.html
+          make async-resource.html
+      - name: build pdf
+        run: |
+          make asyncscope.pdf
+          make async-resource.pdf
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         if: github.ref == 'refs/heads/main'
