@@ -250,6 +250,7 @@ After all those *async-operation* complete, then `run()` signals to `open()` whi
 #### Activity diagram 
 
 ```plantuml
+!pragma layout smetana
 title run(), open(), and close() activity
 
 (*) -->[invoke] "open(async-resource)"
@@ -316,6 +317,7 @@ The *run-operation*, will complete after the following steps:
 #### Activity diagram 
 
 ```plantuml
+!pragma layout smetana
 title "run() -> sequence-sender activity"
 
 (*) -->[invoke] "run(async-resource)"
