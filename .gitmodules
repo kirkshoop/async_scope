@@ -2,8 +2,3 @@
 	path = wg21
 	url = https://github.com/kirkshoop/wg21.git
 	branch = addplantuml
-[submodule "external/p2300"]
-	path = external/p2300
-	url = https://github.com/brycelelbach/wg21_p2300_std_execution.git
-[submodule "addplantuml"]
-	branch = wg21
