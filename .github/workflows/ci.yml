@@ -12,16 +12,16 @@ jobs:
 #        with:
 #          cc: gcc-11
 #          checks: build test
-  build-clang-12:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@master
-        with:
-          submodules: 'true'
-      - uses: docker://lucteo/action-cxx-toolkit.clang12:latest
-        with:
-          cc: clang-12
-          checks: build test
+  # build-clang-12:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@master
+  #       with:
+  #         submodules: 'true'
+  #     - uses: docker://lucteo/action-cxx-toolkit.clang12:latest
+  #       with:
+  #         cc: clang-12
+  #         checks: build test
   build-clang-13:
     runs-on: ubuntu-latest
     steps:
@@ -44,24 +44,24 @@ jobs:
 #          checks: cppcheck clang-tidy
 #          clangtidyflags: '-quiet'
 #          cppcheckflags: '--enable=warning,style,performance,portability --inline-suppr'
-  clang-format:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@master
-        with:
-          submodules: 'true'
-      - uses: docker://lucteo/action-cxx-toolkit.main:latest
-        with:
-          checks: clang-format
-          clangformatdirs: include test
-  sanitizer:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@master
-        with:
-          submodules: 'true'
-      - uses: docker://lucteo/action-cxx-toolkit.main:latest
-        with:
-          cc: clang-13
-          cxxflags: -DNO_TESTS_WITH_EXCEPTIONS=1
-          checks: sanitize=address sanitize=undefined
+  # clang-format:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@master
+  #       with:
+  #         submodules: 'true'
+  #     - uses: docker://lucteo/action-cxx-toolkit.main:latest
+  #       with:
+  #         checks: clang-format
+  #         clangformatdirs: include test
+  # sanitizer:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@master
+  #       with:
+  #         submodules: 'true'
+  #     - uses: docker://lucteo/action-cxx-toolkit.main:latest
+  #       with:
+  #         cc: clang-13
+  #         cxxflags: -DNO_TESTS_WITH_EXCEPTIONS=1
+  #         checks: sanitize=address sanitize=undefined

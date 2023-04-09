@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
-      - run: make generated/asyncscope.html
+      - run: make html && make pdf
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         if: github.ref == 'refs/heads/main'
