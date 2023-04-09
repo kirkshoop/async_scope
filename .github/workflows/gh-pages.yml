@@ -16,8 +16,8 @@ jobs:
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: fonts-ipafont graphviz wget openjdk-8-jre git curl texlive-full
-          version: 1.0
+          packages: fonts-ipafont graphviz wget openjdk-8-jre git curl texlive-latex-base
+          version: 1.01
       - uses: actions/checkout@v2
         with:
           submodules: true
