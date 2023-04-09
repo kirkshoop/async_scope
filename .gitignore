@@ -1,5 +1,6 @@
 /py
 generated/
+plantuml-images/
 build/
 .idea
 .vscode

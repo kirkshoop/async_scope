@@ -53,15 +53,6 @@ This paper describes how to implement rules for the construction and destruction
 Design
 ======
 
-What is the rational for this design?
--------------------------------------
-
-The rationale for this design is that it unifies and generalizes asynchronous construction and destruction, making the construction adaptable via sender algorithms. Its success cases are handled by what follows an `open()` *async-function*, its failure cases are handled as results of the `run()` *async-function*. The success case isn't run at all if `open()` fails, quite like what follows RAII initialization isn't performed if the RAII initialization fails.
-
-Furthermore, asynchronous resources are acquired only when needed by asynchronous work, and that acquisition can itself be asynchronous. As a practical example, consider a thread pool that has a static amount of threads in it. With this approach, the threads can be spun up when needed by asynchronous work, and no sooner - and the threads are spun up asynchronously, without blocking, but the "success" case, i.e. the code that uses the threads, is run after the threads have been spun up.
-
-The communication between `open()` and `run()` on an asynchronous resource is implicit, as is the communication between `close()` and `run()` on an asynchronous resource. The rationale for this choice is that it more closely models how language-level scopes work - you don't need to 'connect' the success code to a preceding RAII initialization, the success code just follows the RAII initialization once the initialization is complete. Likewise, there's no need to 'connect' `close()` to a completion of `run()`, that happens implicitly, quite like destruction implicitly follows exiting a scope. 
-
 What are the requirements for an *async-resource*?
 --------------------------------------------------
 
@@ -100,7 +91,7 @@ What is the concept that an *async-resource* must satisfy?
 
 There are two options for defining the *async-resource* concept that are described here. Either one will satisfy the requirements.
 
-### run(), open(), and close()
+### Option A - run(), open(), and close()
 
 This option uses three new CPOs in two concepts that describe the lifetime 
 of an *async-resource*.
@@ -171,7 +162,7 @@ using close_t = /*implementation-defined/*;
 inline static constexpr close_t close{};
 ```
 
-### run() -> *sequence-sender*
+### Option B - run() -> *sequence-sender*
 
 This option uses one new CPO in one concept that describes the lifetime 
 of an *async-resource*.
@@ -203,6 +194,19 @@ using run_t = /*implementation-defined/*;
 /// @returns sequence-sender<async-resource-token>
 inline static constexpr run_t run{};
 ```
+
+What is the rational for this design?
+-------------------------------------
+
+This rational targets Option A. Exchanging the `open` mentions for the emission of the *async-resource-token* item and `close` mentions for the completion of the sender expression that uses the *async-resource-token* will describe the rational for Option B.
+
+### run(), open(), and close()
+
+The rationale for this design is that it unifies and generalizes asynchronous construction and destruction, making the construction adaptable via sender algorithms. Its success cases are handled by what follows an `open()` *async-function*, its failure cases are handled as results of the `run()` *async-function*. The success case isn't run at all if `open()` fails, quite like what follows RAII initialization isn't performed if the RAII initialization fails.
+
+Furthermore, asynchronous resources are acquired only when needed by asynchronous work, and that acquisition can itself be asynchronous. As a practical example, consider a thread pool that has a static amount of threads in it. With this approach, the threads can be spun up when needed by asynchronous work, and no sooner - and the threads are spun up asynchronously, without blocking, but the "success" case, i.e. the code that uses the threads, is run after the threads have been spun up.
+
+The communication between `open()` and `run()` on an asynchronous resource is implicit, as is the communication between `close()` and `run()` on an asynchronous resource. The rationale for this choice is that it more closely models how language-level scopes work - you don't need to 'connect' the success code to a preceding RAII initialization, the success code just follows the RAII initialization once the initialization is complete. Likewise, there's no need to 'connect' `close()` to a completion of `run()`, that happens implicitly, quite like destruction implicitly follows exiting a scope. 
 
 How do these CPOs compose to provide an async resource?
 -------------------------------------------------------
@@ -243,6 +247,37 @@ After all those *async-operation* complete, then `run()` signals to `open()` whi
 
 - `close()` completes
 
+#### Activity diagram 
+
+```plantuml
+title run(), open(), and close() activity
+
+(*) -->[invoke] "open(async-resource)"
+
+(*) -->[invoke] "run(async-resource)"
+-->[invoke] "asynchronous construction"
+-->[complete] "open(async-resource)" 
+
+
+-->[completed] "async-resource-token" 
+
+
+-->[invoke] "spawn(async-resource-token, sender)"
+
+-->[invoke] "close(async-resource-token)"
+-->[invoke] "asynchronous destruction"
+-->[complete] "close(async-resource-token)" 
+
+"asynchronous destruction" -->[complete] "run(async-resource)" 
+-->[completed] ===DESTRUCTED===
+
+ "close(async-resource-token)" -->[completed] ===DESTRUCTED===
+--> "destructed object"
+
+
+-->(*)
+```
+
 ### run() -> *sequence-sender*
 
 The *sequence-sender* returned from `run()` produces a *run-operation*.
@@ -277,6 +312,28 @@ The *run-operation*, will complete after the following steps:
   **at this point, the *async-resource* lifetime ends**
 
 - any *async-operation* needed to close the *async-resource* have completed
+
+#### Activity diagram 
+
+```plantuml
+title "run() -> sequence-sender activity"
+
+(*) -->[invoke] "run(async-resource)"
+-->[invoke] "asynchronous construction"
+-->[invoke] "use-token-sender = set_next(async-resource-token-sender)" 
+
+-->[invoke] "spawn(async-resource-token, sender)"
+
+-->[invoke] "use-token-sender"
+
+-->[completed] ===READYTODESTRUCT===
+
+-->[invoke] "asynchronous destruction"
+
+-->[completed] "destructed object"
+
+-->(*)
+```
 
 How do you use an *async-resource*?
 -----------------------------------
