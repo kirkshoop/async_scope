@@ -633,6 +633,7 @@ all --> strg -- : complete when_all
 end
 ar --> strg -- : 
 strg --> enc -- : complete storage
+deactivate enc
 ```
 
 #### run() -> *sequence-sender*
@@ -687,6 +688,7 @@ end
 end
 all --> strg -- : complete ""let_value_each(""\n""  run(ctng-scp), tkn-fn))""
 strg --> enc -- : complete ""let_value(""\n""  just(""\n""    make_deferred<""\n""      counting_scope>()), ""\n""  storage-fn)""
+deactivate enc
 ```
 
 ### N resources
@@ -746,6 +748,7 @@ all --> strg -- : complete ""when_all""
 end
 ar --> strg -- : 
 strg --> enc -- : complete storage
+deactivate enc
 ```
 
 ### use_resource
@@ -769,4 +772,5 @@ use -> ar : wait for all \nspawned operations \nto stop and any async \noperatio
 ... wibbily wobbly timey wimey stuff ...
 ar --> use -- : 
 use --> enc -- : complete use_resources
+deactivate enc
 ```
