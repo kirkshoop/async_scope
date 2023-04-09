@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: deployment
     steps:
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: fonts-ipafont graphviz wget openjdk-8-jre git curl texlive-full
+          version: 1.0
       - uses: actions/checkout@v2
         with:
           submodules: true
@@ -27,3 +31,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./generated
           commit_message: "Deploy Docs: ${{ github.event.head_commit.message }}"
+
+
