@@ -21,20 +21,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - name: install wget, curl, git
+        uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: fonts-ipafont graphviz wget curl git
+          packages: fonts-ipafont wget curl git
           version: 1.02
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - name: install openjdk 8
+        uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: openjdk-8-jre
           version: 1.02
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - name: install texlive latex base
+        uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: texlive-latex-base
           version: 1.02
 
-      - name: install
+      - name: install texlive xetex
         run: |
           sudo apt update
           sudo apt install -y texlive-xetex
@@ -42,6 +45,11 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
+
+      - name: install dependencies
+        run: |
+          make update-dependencies
+          make update
 
       - name: build html
         run: |
