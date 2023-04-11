@@ -1,18 +1,25 @@
 name: Github Pages
 
-concurrency: 
-  group: deployment
-  cancel-in-progress: true
-
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  deployment:
+  build:
     runs-on: ubuntu-latest
-    environment: deployment
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -26,27 +33,38 @@ jobs:
         with:
           packages: texlive-latex-base
           version: 1.02
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
+
       - name: install
         run: |
           sudo apt update
-          sudo apt install texlive-xetex
+          sudo apt install -y texlive-xetex
+
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
       - name: build html
         run: |
-          make asyncscope.html
-          make async-resource.html
+          make html
       - name: build pdf
         run: |
-          make asyncscope.pdf
-          make async-resource.pdf
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        if: github.ref == 'refs/heads/main'
+          make pdf
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v2
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./generated
-          commit_message: "Deploy Docs: ${{ github.event.head_commit.message }}"
+          path: generated
 
-
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v1
