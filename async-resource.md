@@ -354,14 +354,13 @@ Here is a basic example of composing resources using this pattern:
 
 ```cpp
 int main() {
-  exec::static_thread_pool ctx{1};
-  exec::counting_scope context;
+  exec::static_thread_pool_resource ctx{1};
+  exec::counting_scope_resource context;
   auto use = ex::when_all(
       exec::open(ctx), 
       exec::open(context)) | 
     ex::let_value([&](
-      ex::scheduler auto sch, 
-      exec::async_scope auto scope){
+      auto sch, auto scope){
         // async-resource lifetime begins
 
         sender auto begin = 
@@ -389,14 +388,13 @@ int main() {
 
 ```cpp
 int main() {
-  exec::static_thread_pool ctx{1};
-  exec::counting_scope context;
+  exec::static_thread_pool_resource ctx{1};
+  exec::counting_scope_resource context;
   auto use = ex::zip(
       exec::run(ctx), 
       exec::run(context)) | 
     ex::let_value_each([&](
-      ex::scheduler auto sch, 
-      exec::async_scope auto scope){
+      auto sch, auto scope){
         // async-resource lifetime begins
 
         sender auto begin = 
@@ -431,12 +429,12 @@ expression.
 ### run(), open(), and close()
 
 ```cpp
-stop_source stp;
-static_thread_pool ctx{1};
-async_allocator aa;
-counting_scope as;
-async_socket askt;
-split spl;
+stop_source_resource stp;
+static_thread_pool_resource ctx{1};
+async_allocator_resource aa;
+counting_scope_resource as;
+async_socket_resource askt;
+split_resource spl;
 
 auto use = when_all(
   open(stp), open(ctx), open(aa), 
@@ -477,12 +475,12 @@ std::this_thread::sync_wait(
 ### run() -> *sequence-sender*
 
 ```cpp
-stop_source stp;
-static_thread_pool ctx{1};
-async_allocator aa;
-counting_scope as;
-async_socket askt;
-split spl;
+stop_source_resource stp;
+static_thread_pool_resource ctx{1};
+async_allocator_resource aa;
+counting_scope_resource as;
+async_socket_resource askt;
+split_resource spl;
 
 auto use = zip(
   run(stp), run(ctx), run(aa), 
@@ -533,11 +531,11 @@ std::this_thread::sync_wait(
         }
         return with_env(env, when_all(producer, nest(consume(output))));
       }, 
-      make_deferred<stop_source>(),
-      make_deferred<static_thread_pool>(1),
-      make_deferred<async_allocator>(),
-      make_deferred<counting_scope>(),
-      make_deferred<async_socket>(),
+      make_deferred<stop_source_resource>(),
+      make_deferred<static_thread_pool_resource>(1),
+      make_deferred<async_allocator_resource>(),
+      make_deferred<counting_scope_resource>(),
+      make_deferred<async_socket_resource>(),
       make_deferred<split>()));
 ```
 
