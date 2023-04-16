@@ -202,7 +202,7 @@ This rational targets Option A. Exchanging the `open` mentions for the emission 
 
 ### run(), open(), and close()
 
-The rationale for this design is that it unifies and generalizes asynchronous construction and destruction, making the construction adaptable via sender algorithms. Its success cases are handled by what follows an `open()` *async-function*, its failure cases are handled as results of the `run()` *async-function*. The success case isn't run at all if `open()` fails, quite like what follows RAII initialization isn't performed if the RAII initialization fails.
+The rationale for this design is that it unifies and generalizes asynchronous construction and destruction, making the construction adaptable via sender algorithms. Its success cases are handled by what follows an `open()` *async-function*, its failure cases are handled as results of the `run()` *async-function*. The success case isn't run at all if `run()` fails (which completes `open()` with `set_stopped()`), quite like what follows RAII initialization isn't performed if the RAII initialization fails.
 
 Furthermore, asynchronous resources are acquired only when needed by asynchronous work, and that acquisition can itself be asynchronous. As a practical example, consider a thread pool that has a static amount of threads in it. With this approach, the threads can be spun up when needed by asynchronous work, and no sooner - and the threads are spun up asynchronously, without blocking, but the "success" case, i.e. the code that uses the threads, is run after the threads have been spun up.
 
@@ -253,28 +253,31 @@ After all those *async-operation* complete, then `run()` signals to `open()` whi
 !pragma layout smetana
 title run(), open(), and close() activity
 
-(*) -->[invoke] "open(async-resource)"
+(*) -->[invoke] "open(async-resource) [enter]"
+-->[signal] "run(async-resource) [enter]"
 
-(*) -->[invoke] "run(async-resource)"
+(*) -->[invoke] "run(async-resource) [enter]"
 -->[invoke] "asynchronous construction"
--->[complete] "open(async-resource)" 
 
-
--->[completed] "async-resource-token" 
-
+-->[complete] "open(async-resource) [ready]"
+-->[complete] "let(open(async-resource), \n  [](async-resource-token){\n    return use-token-sender;})" 
 
 -->[invoke] "spawn(async-resource-token, sender)"
 
--->[invoke] "close(async-resource-token)"
--->[invoke] "asynchronous destruction"
--->[complete] "close(async-resource-token)" 
+-->[invoke] "use-token-sender" 
 
-"asynchronous destruction" -->[complete] "run(async-resource)" 
--->[completed] ===DESTRUCTED===
+-->[invoke] "close(async-resource-token) [exit]"
 
- "close(async-resource-token)" -->[completed] ===DESTRUCTED===
---> "destructed object"
+-->[signal] "run(async-resource) [leave]"
 
+-->[invoke] "asynchronous destruction" 
+"spawn(async-resource-token, sender)" -->[join] "asynchronous destruction"
+
+-->[complete] "close(async-resource-token) [closed]" 
+
+-->[complete] "run(async-resource) [destruct]"
+
+-->[complete] "destructed object"
 
 -->(*)
 ```
@@ -320,15 +323,16 @@ The *run-operation*, will complete after the following steps:
 !pragma layout smetana
 title "run() -> sequence-sender activity"
 
-(*) -->[invoke] "run(async-resource)"
+(*) -->[invoke] "run(async-resource) [enter]"
 -->[invoke] "asynchronous construction"
 -->[invoke] "use-token-sender = set_next(async-resource-token-sender)" 
 
--->[invoke] "spawn(async-resource-token, sender)"
-
 -->[invoke] "use-token-sender"
 
--->[completed] ===READYTODESTRUCT===
+-->[invoke] "spawn(async-resource-token, sender)"
+-->[join] "asynchronous destruction"
+
+"use-token-sender" -->[completed] "run(async-resource) [leave]"
 
 -->[invoke] "asynchronous destruction"
 
@@ -544,7 +548,7 @@ There have been many, many design options explored for the `async_scope`. We had
 
 The patterns model RAII for objects used by *async-function*s. 
 
-In C++, RAII works by attaching the constructor and destructor to a block of code in a function. This pattern uses `run()` to represent the block that the object is contained in. The `run()` *async-function* satisfies the structure requirement (only nested *async-function*s use the object) and satisfies the correct-by-construction requirement (the object is not available until the `run()` *async-function* is started).
+In C++, RAII works by attaching the constructor and destructor to a block of code in a function. This pattern uses the `run()` *async-function* to represent the block in which the object is contained. The `run()` *async-function* satisfies the structure requirement (only nested *async-function*s use the object) and satisfies the correct-by-construction requirement (the object is not available until the `run()` *async-function* is started and the object is closed when all nested *async-function*s complete).
 
 ## run(), open(), and close()
 
@@ -606,17 +610,28 @@ The `run` *async-function* provides the object in a structured manner. The objec
 
 Ordering of constructors and destructors is expressed by nesting resources explicitly. Using the `zip()` algorithm to compose resources concurrently requires that the resources are independent because there is no token to the resource available until the `zip()` algorithm completes.
 
+Implementation Experience
+=========================
+
+There are many implementations of async-scope. There is one in [@follygithub] and one in [@stdexecgithub]. Each is different, as the design space was being explored. Some are in use in large-scale production. 
+
+Both option a and option b have been implemented while writing this paper. Implementing resources with option a is much more complicated and difficult than writing the same resource with option b.
+
+Prioritizing sequence-sender will make option b the obvious choice. 
+
+option a is a fallback in the case where sequence-sender is delayed or rejected.
+
 Algorithms
 ==========
 
 `make_deferred`
 ---------------
 
-The `make_deferred` algorithm packages the constructor arguments for a type `T` and provides `void operator()()` that will construct `T` with the stored arguments when it is invoked.
+The `make_deferred` algorithm packages the constructor arguments for a potentially immovable type `T` and provides `void operator()()` that will construct `T` with the stored arguments when it is invoked.
 
 The `make_deferred` algorithm returns a *deferred-object* that contains storage for `T` and for `ArgN...`.
 
-Before `T` is constructed, the *deferred-object* copies and moves if the stored `ArgN...` supports the operations.
+Before `T` is constructed, the *deferred-object* copies and moves if the stored `ArgN...` supports those operations.
 
 When the *deferred-object* is invoked as a function taking no arguments, `T` is constructed in the reserved storage for `T` using the `ArgN...` stored in the *deferred-object* when it was constructed.
 
@@ -635,9 +650,9 @@ static inline constexpr make_deferred_t make_deferred{};
 `use_resources`
 ---------------
 
-The `use_resource` algorithm composes multiple *async-resources* into one *async-function* that is returned as a sender.
+The `use_resources` algorithm composes multiple *async-resources* into one *async-function* that is returned as a sender.
 
-The `use_resource` algorithm will use the selected option (run-open-close or run-sequence-sender) to apply all the *async-resource-tokens* for the constructed *async-resource*s to the single *body-function*.
+The `use_resources` algorithm will use the selected option (run-open-close or run-sequence-sender) to apply all the *async-resource-token*s for the constructed *async-resource*s to the single *body-function*.
 
 When the returned *async-function* is invoked, it will invoke all the deferred *async-resource*s to construct them in its *operation-state* and then it will acquire the *async-resource-token* for each *async-resource* and then invoke the *body-function* once with all the tokens.
 
@@ -646,7 +661,7 @@ struct use_resources_t {
   template<class Body, class... AsyncResourcesDeferred>
   @@*implementation-defined*@@ operator()(Body&& body, AsyncResourcesDeferred&&... resources) const;
 };
-static inline constexpr use_resource_t use_resources{};
+static inline constexpr use_resources_t use_resources{};
 ```
 
 Appendices
@@ -892,3 +907,18 @@ ar --> use -- :
 use --> enc -- : complete use_resources
 deactivate enc
 ```
+---
+references:
+  - id: stdexecgithub
+    citation-label: stdexecgithub
+    type: repository
+    title: "stdexec"
+    url: https://github.com/NVIDIA/stdexec
+    publisher: NVidia
+  - id: follygithub
+    citation-label: follygithub
+    type: repository
+    title: "folly"
+    url: https://github.com/facebook/folly
+    publisher: Facebook
+---
