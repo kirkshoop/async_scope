@@ -16,7 +16,7 @@ toc: true
 Introduction
 ============
 
-This paper describes concepts that would be used to create and cleanup an object within an *async-scope* that will contain all *async-function*s composed into that *async-scope*. These *async-function*s have access to a non-owning handle to the *async-resource* that is safe to use. These *async-function*s can be running on any execution context. An *async-resource* object has only one concern, which is to open before any nested *async-function*s start and to close after any nested *async-function* complete. In order to be useful within other asynchronous scopes, the object must not have any blocking functions.
+This paper describes concepts that would be used to create and cleanup an object within an *async-function* that will contain all *async-function*s composed into that *async-function*. These *async-function*s have access to a non-owning handle to the *async-resource* that is safe to use. These *async-function*s can be running on any execution context. An *async-resource* object has only one concern, which is to open before any nested *async-function*s start and to close after any nested *async-function* complete. In order to be useful within other *async-function*s, the object must not have any blocking functions.
 
 An *async-resource* can be thought of as an async-RAII object.
 
@@ -35,7 +35,7 @@ Examples include:
  - mutex
  - file
  - socket
- - *async-scope*
+ - counting-scope [@P2519R0]
 
 Motivation
 ==========
@@ -118,7 +118,7 @@ using open_t = /*implementation-defined/*;
 /// @details The async-resource-token will be valid until the sender provided 
 /// by close() is started. 
 /// The sender provided by open() will complete after the sender provided by 
-/// run() has completed any async-operation needed to open the resource.
+/// run() has completed any async-function needed to open the resource.
 /// The sender provided by open() will not fail.
 /// @param async-resource&  
 /// @returns sender<resource-token>
@@ -126,11 +126,11 @@ inline static constexpr open_t open{};
 
 using run_t = /*implementation-defined/*;
 /// @brief the run() cpo provides a sender-of-void. 
-/// @details The sender provided by run() will start any async-operation 
-/// needed to open the resource and when all those operations complete 
+/// @details The sender provided by run() will start any async-function 
+/// needed to open the resource and when all those async-functions complete 
 /// then run() will complete the sender provided by open().
 /// The sender provided by run() will complete after the sender provided 
-/// by close() is started and all the async-operation needed to close 
+/// by close() is started and all the async-functions needed to close 
 /// the async-resource complete and the sender provided by close() is completed. 
 /// @param async-resource&  
 /// @returns sender<>
@@ -154,8 +154,8 @@ concept async_resource_token =
 using close_t = /*implementation-defined/*;
 /// @brief the close() cpo provides a sender-of-void. 
 /// @details The sender provided by close() will trigger the sender provided 
-/// by run() to begin any async-operation needed to close the resource and 
-/// will complete when all the async-operation complete. 
+/// by run() to begin any async-function needed to close the resource and 
+/// will complete when all the async-function complete. 
 /// The sender provided by close() will not fail.
 /// @param async-resource-token&  
 /// @returns sender<>
@@ -180,15 +180,15 @@ concept async_resource =
 using run_t = /*implementation-defined/*;
 /// @brief the run() cpo provides a sequence-sender-of-token. 
 /// @details The sequence-sender provided by run() will produce 
-/// a run-operation. When the run-operation is started, it will start  
-/// any async-operation that are needed to open the async-resource. 
-/// After all those async-operation complete, the run-operation 
+/// a run-function. When the run-function is started, it will start  
+/// any async-function that are needed to open the async-resource. 
+/// After all those async-function complete, the run-function 
 /// will produce an async-resource-token as the only item in the 
 /// sequence.
 /// After the sender-expression for the async-resource-token item 
-/// completes, the run-operation will start any async-operation 
+/// completes, the run-function will start any async-function 
 /// that are needed to close the async-resource. 
-/// After all those async-operation complete, the run-operation 
+/// After all those async-function complete, the run-function 
 /// will complete. 
 /// @param async-resource&  
 /// @returns sequence-sender<async-resource-token>
@@ -215,15 +215,15 @@ How do these CPOs compose to provide an async resource?
 
 The `open()` *async-function* and the `run()` *async-function* are invoked concurrently.
 
-After both of the open and run operations are started, `run()` 
+After both of the `open()` and `run()` *async-function*s are started, `run()` 
 invokes any *async-function* that is needed to initialize the *async-resource*. 
 
-After all those *async-operation* complete, then `run()` signals to `open()` which then will complete with the *async-resource-token*.
+After all those *async-function*s complete, then `run()` signals to `open()` which then will complete with the *async-resource-token*.
 
 `run()` will complete after the following steps:
 
 - the runtime has entered the `main()` function (requires a signal from the runtime)
-- any *async-operation* needed to open the *async-resource* has completed
+- any *async-function* needed to open the *async-resource* has completed
 
   **at this point, the *async-resource* lifetime begins**
 
@@ -243,7 +243,7 @@ After all those *async-operation* complete, then `run()` signals to `open()` whi
 
   **at this point, the *async-resource* lifetime ends**
 
-- any *async-operation* needed to close the *async-resource* have completed
+- any *async-function* needed to close the *async-resource* have completed
 
 - `close()` completes
 
@@ -284,24 +284,24 @@ title run(), open(), and close() activity
 
 ### run() -> *sequence-sender*
 
-The *sequence-sender* returned from `run()` produces a *run-operation*.
+`run()` is an *async-function* aka *run-function*.
 
-After the *run-operation* is started, it starts any *async-operation* 
+After the *run-function* is invoked, it starts any *async-function* 
 that are needed to initialize the *async-resource*. 
 
-After all those *async-operation* complete, the *run-operation* will 
+After all those *async-function* complete, the *run-function* will 
 emit the *async-resource-token* as the only item in the sequence.
 
-The *run-operation*, will complete after the following steps:
+The *run-function*, will complete after the following steps:
 
 - the runtime has entered the `main()` function (this requires a signal from the runtime)
-- any *async-operation* needed to open the *async-resource* has completed
+- any *async-function* needed to open the *async-resource* has completed
 
   **at this point, the *async-resource* lifetime begins**
 
 - the *async-resource-token* item is emitted
 - a stop condition is encountered
-  - a `stop_token`, provided by the environment of the *open-operation*, is in the 
+  - a `stop_token`, provided by the environment of the *open-function*, is in the 
     `stop_requested()` state 
 
   **OR** 
@@ -315,7 +315,7 @@ The *run-operation*, will complete after the following steps:
 
   **at this point, the *async-resource* lifetime ends**
 
-- any *async-operation* needed to close the *async-resource* have completed
+- any *async-function* needed to close the *async-resource* have completed
 
 #### Activity diagram 
 
@@ -417,7 +417,7 @@ int main() {
 :::
 
 This pattern correctly scopes the use of the *async-resource* and composes
-the open, run, and close *async-operation*s correctly.
+the open, run, and close *async-function*s correctly.
 
 It is possible to compose multiple *async-resource*s into the same block or
 expression.
@@ -542,9 +542,9 @@ std::this_thread::sync_wait(
 Why this design?
 ================
 
-There have been many, many design options explored for the `async_scope`. We had a few variations of a single object with methods, then two objects with methods. It was at this point that a pattern began to form across `stop_source`/`stop_token`, *execution-context*/`scheduler`, *async-scope*/*async-scope-token*.
+There have been many, many design options explored for the `counting_scope` proposed in [@P2519R0]. We had a few variations of a single object with methods, then two objects with methods. It was at this point that a pattern began to form across `stop_source`/`stop_token`, *execution-context*/`scheduler`, *async-scope*/*async-scope-token*.
 
-The patterns model RAII for objects used by *async-function*s. 
+The patterns proposed in this design model RAII for objects used by *async-function*s. 
 
 In C++, RAII works by attaching the constructor and destructor to a block of code in a function. This pattern uses the `run()` *async-function* to represent the block in which the object is contained. The `run()` *async-function* satisfies the structure requirement (only nested *async-function*s use the object) and satisfies the correct-by-construction requirement (the object is not available until the `run()` *async-function* is started and the object is closed when all nested *async-function*s complete).
 
@@ -556,19 +556,19 @@ The run/open/close option uses an *async-function* to store the object (`run()`)
 
 `open` does not perform a task, its completion is a signal that `run` has successfully constructed the resource.
 
-Existing resources, like `run_loop` and `stop_source` have a method that returns a token. This does not provide for any asynchronous operations that are required before a token is valid.
+Existing resources, like `run_loop` and `stop_source` have a method that returns a token. This does not provide for any *async-function*s that are required before a token is valid.
 
-`open` is an operation that provides the token only after it is valid.
+`open` is an *async-function* that provides the token only after token is valid.
 
-`open` completes when the token is valid. All operations using the token must be nested within the `run` operation (yes, it is the run operation that owns the resource, not the open operation).
+`open` completes when the token is valid. All *async-function*s using the token must be nested within the `run` *async-function* (yes, it is the run *async-function* that owns the resource, not the open *async-function*).
 
-The receiver passed to the `open` operation is used to query services as needed (allocator, scheduler, stop-token, etc..)
+The receiver passed to the `open` *async-function* is used to query services as needed (allocator, scheduler, stop-token, etc..)
 
 ### The run cpo
 
-`open` may start before the resource is constructed and completes when the token is valid. `run` starts before the resources is constructed and completes after the token is closed. The `run` operation represents the entire resource. The `run` operation includes construction, open, resource usage, and close. `run` is the owner of the resource, `open` is the token accessor, `close` is the signal to stop the resource.
+`open` may start before the resource is constructed and completes when the token is valid. `run` starts before the resources is constructed and completes after the token is closed. The `run` *async-function* represents the entire resource. The `run` *async-function* includes construction, open, resource usage, and close. `run` is the owner of the resource, `open` is the token accessor, `close` is the signal to stop the resource.
 
-`open` cannot represent the resource because it will complete before the resources reaches the closed state.
+`open` cannot represent the resource because it will complete before the resource reaches the closed state.
 
 `close` cannot represent the resource because it cannot begin until after open has completed.
 
@@ -576,17 +576,17 @@ The receiver passed to the `open` operation is used to query services as needed 
 
 `close` does not perform a task, its invocation is a signal that requests that the resource safely destruct.
 
-`close` is used to start any operations that stop the resource and invalidate the token. After the `close` operation completes the `run` operation runs the destructor of the resource and completes.
+`close` is used to start any *async-function*s that stop the resource and invalidate the token. After the `close` *async-function* completes the `run` *async-function* runs the destructor of the resource and completes.
 
 ### Composition
 
 The `open` and `close` cpos are not the only way to compose the token into a sender expression.
 
-The benefit provided by the `open` and `close` operations is that a `when_all` of multiple `open`s and a `when_all` of multiple `close`s can be used to access multiple tokens without nesting each token inside the prev.
+The benefit provided by the `open` and `close` *async-function*s is that a `when_all` of multiple `open`s and a `when_all` of multiple `close`s can be used to access multiple tokens without nesting each token inside the prev.
 
 ### Structure
 
-The `run`, `open`, and `close` operations provide the token in a structured manner. The token is not available until the `run` operation has started and the `open` operation has completed. The `run` will not complete until the `close` operation is started. This structure makes using the resource correct-by-construction. There is no resource until the `run` and `open` operations are started. The `run` operation will not complete until the `close` operation completes.
+The `run`, `open`, and `close` *async-function*s provide the token in a structured manner. The token is not available until the `run` *async-function* has started and the `open` *async-function* has completed. The `run` will not complete until the `close` *async-function* is started. This structure makes using the resource correct-by-construction. There is no resource until the `run` and `open` *async-function*s are started. The `run` *async-function* will not complete until the `close` *async-function* completes.
 
 Ordering of constructors and destructors is expressed by nesting resources explicitly. Using `when_all` to compose resources concurrently requires that the resources are independent because there is no token to the resource available until the `when_all` completes.
 
@@ -596,7 +596,7 @@ The run/sequence-sender option uses an *async-function* to store the object (`ru
 
 ### The run cpo
 
-`run` starts before the resource is constructed and completes after all nested *async-function*s have completed and the object has finished any cleanup *async-function*. The `run` operation represents the entire resource. The `run` operation includes construction, resource usage, and destruction. `run` is the owner of the resource.
+`run` starts before the resource is constructed and completes after all nested *async-function*s have completed and the object has finished any cleanup *async-function*. The `run` *async-function* represents the entire resource. The `run` *async-function* includes construction, resource usage, and destruction. `run` is the owner of the resource.
 
 ### Composition
 
@@ -604,20 +604,163 @@ Composition is easily achieved using the `zip()` algorithm and the `let_value_ea
 
 ### Structure
 
-The `run` *async-function* provides the object in a structured manner. The object is not available until the `run` operation has started. The `run()` *async-function* will not complete until the object is no longer in use. This structure makes using the resource correct-by-construction. There is no resource until the `run()` *async-function* is started. The `run()` *async-function* completes after all nested *async-function*s have completed and the object has finished any cleanup *async-function*.
+The `run` *async-function* provides the object in a structured manner. The object is not available until the `run` *async-function* has started. The `run()` *async-function* will not complete until the object is no longer in use. This structure makes using the resource correct-by-construction. There is no resource until the `run()` *async-function* is invoked. The `run()` *async-function* completes after all nested *async-function*s have completed and the object has finished any cleanup *async-function*.
 
 Ordering of constructors and destructors is expressed by nesting resources explicitly. Using the `zip()` algorithm to compose resources concurrently requires that the resources are independent because there is no token to the resource available until the `zip()` algorithm completes.
 
 Implementation Experience
 =========================
 
-There are many implementations of async-scope. There is one in [@follygithub] and one in [@stdexecgithub]. Each is different, as the design space was being explored. Some are in use in large-scale production. 
+There are many implementations of *async-scope*. There is one in [@follygithub] and one in [@stdexecgithub]. Each is different, as the design space was being explored. Some are in use in large-scale production. 
 
-Both option a and option b have been implemented while writing this paper. Implementing resources with option a is much more complicated and difficult than writing the same resource with option b.
+Resources that implement both option a and option b have been implemented while writing this paper. Implementing resources with option a is much more complicated and difficult than writing the same resource with option b.
 
 Prioritizing sequence-sender will make option b the obvious choice. 
 
 option a is a fallback in the case where sequence-sender is delayed or rejected.
+
+Entry and exit signals for `main()`
+===================================
+
+The steps for the `run()` *async-function* on an *async-resource* include requiring that `main()` has been entered before *async-constructor*s are invoked and that `main()` exit must signal all *async-resource*s when `main()` exits.
+
+```cpp
+// function object that returns a sender_of<void> that will 
+// complete when main() is invoked and immediately when main() 
+// has already been invoked
+struct main_enter_t {
+  @@*implementation-defined*@@ operator()();
+};
+static inline constexpr main_enter_t main_enter{};
+
+// function object that returns a sender_of<void> that will 
+// complete when main() has returned and immediately when main() 
+// has already returned
+struct main_exit_t {
+  @@*implementation-defined*@@ operator()();
+};
+static inline constexpr main_exit_t main_exit{};
+```
+
+Static Initialization Fiasco
+----------------------------
+
+The Static-Initialization-Fiasco is already harmful in single threaded programs, because there is no structure between translation units to order or scope static initialization. In multi threaded programs there are many additional issues caused by this lack of structure. For example:
+
+- The destructor of a static object can be invoked on a different thread than the constructor was invoked. 
+
+- The destructor of a static object can be invoked while other threads are still using the static object. 
+
+- The destructor of a static object can be invoked and then accessed. 
+
+These unstructured invocations on a static object then cause crashes, deadlocks, and even construction of new static object instances of already destructed objects during program exit.
+
+The purpose of *async-resource* is to create structure for asynchronous objects. Using *async-function*s and *async-resource*s to add structure to statically initialized objects can be used to impose structure across static objects for multi threaded and single threaded programs. 
+
+System Execution Context
+========================
+
+[@P2079R2] proposes a `system_context` that provides access to system execution resources like Windows ThreadPool and MacOS GrandCentralDispatch. 
+
+There are design discussions around how the `system_context` object itself will be accessed. It has been shown that at least one std library implementation can produce the system_context as a global object initialized prior to invoking static initializers. Allocators are similarly available before static initializers are invoked.
+
+There may be *async-scope* [@P2519R0] and *stop-source* instances provided by the std library as well.
+
+Now the pre-static-initialization objects (`allocator`, `stop_source`, `system_scope`, `system_context`) need to be structured. Which is allowed to depend on the others? In which order are the constructor and destructor of each invoked? How does a program that does not use one of these system objects prevent them from being constructed (pay only for what you use)?
+
+The system objects are resources. Implementing system resource objects as *async-resources* provides structured construction and structured destruction and pay-only-for-what-you-use.
+
+
+```cpp
+class system_scheduler {
+public:
+  system_scheduler();
+  ~system_scheduler();
+
+  using self_t = system_scheduler; @@*exposition-only*@@
+
+  system_scheduler(const self_t&);
+  system_scheduler(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  bool operator==(const self_t&) const noexcept;
+
+  // returns sender_of<void>
+  @@*implementation-defined*@@ @@*customization-point*@@(decays_to<self_t> auto&&, schedule_t);
+};
+
+class system_execution {
+public:
+  system_execution();
+  ~system_execution();
+
+  using self_t = system_execution; @@*exposition-only*@@
+
+  system_execution(const self_t&);
+  system_execution(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  bool operator==(const self_t&) const noexcept;
+
+  size_t @@*customization-point*@@(decays_to<self_t> const auto&, get_max_concurrency_t);
+
+  bool @@*customization-point*@@(decays_to<self_t> const auto&, get_completes_inline_t);
+
+  bool @@*customization-point*@@(decays_to<self_t> const auto&, get_completes_before_invoke_returns_t);
+
+  bool @@*customization-point*@@(decays_to<self_t> const auto&, get_completes_on_same_t);
+
+  bool @@*customization-point*@@(decays_to<self_t> const auto&, get_completes_on_any_t);
+
+  system_scheduler @@*customization-point*@@(decays_to<self_t> const auto&, get_scheduler_t);
+};
+
+class system_execution_resource {
+public:
+  system_execution_resource();
+  ~system_execution_resource();
+
+  using self_t = system_execution_resource; @@*exposition-only*@@
+
+  system_execution_resource(const self_t&);
+  system_execution_resource(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  using token_t = system_execution;
+
+  // returns sequence_sender_of<token_t> (async-resource option b)
+  @@*implementation-defined*@@ @@*customization-point*@@(decays_to<self_t> auto&&, run_t);
+};
+```
+
+`main()` 
+========
+
+When system resources are implemented as *async-resource* a program that is safe for single threaded and multi threaded programs might implement `main()` in this way:
+
+```cpp
+int main() {
+  using std::execution;
+
+  auto application = [](
+    system_scope scope, 
+    this_thread::system_execution ex) {
+      for (int i = 10; i > 0; --i) {
+        spawn(scope, on(get_scheduler(ex), work{i}));
+      }
+      return just();
+  };
+
+  auto program = use_resources(application,
+    make_deferred<system_scope_resource>();
+    make_deferred<this_thread::system_execution_resource>());
+
+  return this_thread::sync_wait(program);
+}
+```
 
 Algorithms
 ==========
@@ -670,21 +813,20 @@ Rejected Options:
 
 - `join() -> sender`:
 
-  - `join()` returns a sender that completes after running any pending *async-
-operation*s followed by running any *async-operation*s needed to close the
+  - `join()` returns a sender that completes after running any pending *async-function*s followed by invoking any *async-function*s needed to close the
 *async-resource*.
 
   - This option is challenging because it is not correct by construction:
 
-    - Imposes that all users remember to compose `join()` into an `async_scope`
+    - Imposes that all users remember to compose `join()` into an `counting_scope`
       and prevent the destructor from running until `join()` completes.
-    - Provides no way to run *async-operation*s to open the *async-resource*.
+    - Provides no way to invoke *async-function*s to open the *async-resource*.
 
 - `run((token)->sender) -> sender`:
 
   - The sender returned from `run()` will complete after the following steps:
 
-    - *async-operation*s to open the *async-resource*
+    - *async-function*s to open the *async-resource*
 
       ** at this point, *async-resource* lifetime begins **
     
@@ -693,17 +835,17 @@ operation*s followed by running any *async-operation*s needed to close the
     
       ** at this point, *async-resource* lifetime ends **
 
-    - any *async-operation*s needed to close the *async-resource*
+    - any *async-function*s needed to close the *async-resource*
 
   - This option scopes the use of the *async-resource* and composes the open and 
-    close *async-operation*s correctly.
+    close *async-function*s correctly.
 
   - It is hard to compose multiple *async-resource*s into the same block or
     expression (requires nesting calls to `run()` for each *async-resource*, which
     also sequences the open and close for each *async-resource*).
 
-The order of operations when using an async-resource
-----------------------------------------------------
+The order of invocations when using an async-resource
+-----------------------------------------------------
 
 ### One resource
 
@@ -740,7 +882,7 @@ end
 else
 group open the async-resource
 all -> open ++ : start ""let_value(open(ctng-scp), opened-fn)""
-open -> ar : wait for any async operations needed to open
+open -> ar : wait for any async functions needed to open
 end
 end
 ... wibbily wobbly timey wimey stuff ...
@@ -752,7 +894,7 @@ ofn --> open -- : ""return close(ctng-tkn)""
 end
 group close the async-resource
 open -> close ++ : start ""close(ctng-tkn)""
-close -> ar : wait for all \nspawned operations \nto stop and any async \noperations needed to close
+close -> ar : wait for all \nspawned functions \nto stop and any async \nfunctions needed to close
 ... wibbily wobbly timey wimey stuff ...
 ar --> close : enter closed..
 close --> open -- : complete close
@@ -790,9 +932,9 @@ group run the async-resource
 all -> run ++ : start ""run(ctng-scp)""
 group construct the async-resource
 run -> ar ++ : ""ctng-scp()""
-run -> ar : start any async operations needed to open
+run -> ar : invoke any async functions needed to open
 ... wibbily wobbly timey wimey stuff ...
-ar <-- ar : complete open operations
+ar <-- ar : complete open functions
 ar --> run : running..
 run --> all : ""set_next ctng-tkn""
 end
@@ -804,13 +946,13 @@ all -> tkn ++ : start ""on(sch, just(1))""
 ... wibbily wobbly timey wimey stuff ...
 ar <-- ar : complete ""on(sch, just(0))""
 tkn --> all : completed ""on(sch, just(1))""
-tkn --> run -- : token operation completed
-ar --> run : spawned operations completed 
+tkn --> run -- : token function completed
+ar --> run : spawned functions completed 
 end
 group close the async-resource
-run -> ar : start any async operations needed to close
+run -> ar : invoke any async functions needed to close
 ... wibbily wobbly timey wimey stuff ...
-ar <-- ar : complete close operations
+ar <-- ar : complete close functions
 ar --> run : closed..
 run -> ar : ""~ctng-scp()""
 deactivate ar
@@ -855,7 +997,7 @@ end
 else
 group open the async-resource
 all -> open ++ : start ""let_value(""\n""    when_all(""\n""      open(res)...), ""\n""    opened-fn)""
-open -> ar : wait for any async operations needed to open
+open -> ar : wait for any async functions needed to open
 end
 end
 ... wibbily wobbly timey wimey stuff ...
@@ -867,7 +1009,7 @@ ofn --> open -- : ""return when_all(close(tkn)...)""
 end
 group close the async-resource
 open -> close ++ : start ""when_all(close(tkn)...)""
-close -> ar : wait for any async \noperations needed to close
+close -> ar : wait for any async \nfunctions needed to close
 ... wibbily wobbly timey wimey stuff ...
 ar --> close : enter closed..
 close --> open -- : complete ""when_all(close)""
@@ -899,7 +1041,7 @@ use -> ar ++ : construct and open the resource
 use -> ofn ++ : ""opened-fn(ctng-tkn)""
 ofn --> ar : ""spawn(ctng-tkn, on(sch, just()))""
 ofn --> use -- : ""return just()""
-use -> ar : wait for all \nspawned operations \nto stop and any async \noperations needed to close
+use -> ar : wait for all \nspawned functions \nto stop and any async \nfunctions needed to close
 ... wibbily wobbly timey wimey stuff ...
 ar --> use -- : 
 use --> enc -- : complete use_resources
