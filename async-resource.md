@@ -16,15 +16,15 @@ toc: true
 Introduction
 ============
 
-This paper describes concepts that would be used to create and cleanup an object within an `@_async-function_@` that will contain all `@_async-function_@`s composed into that `@_async-function_@`. These `@_async-function_@`s have access to a non-owning handle to the `@_async-resource_@` that is safe to use. These `@_async-function_@`s can be running on any execution context. An `@_async-resource_@` object has only one concern, which is to open before any nested `@_async-function_@`s start and to close after any nested `@_async-function_@` complete. In order to be useful within other `@_async-function_@`s, the object must not have any blocking functions.
+This paper describes concepts that would be used to create and cleanup an object within an _`async-function`_ that will contain all _`async-function`_ s composed into that _`async-function`_. These _`async-function`_ s have access to a non-owning handle to the _`async-resource`_ that is safe to use. These _`async-function`_ s can be running on any execution context. An _`async-resource`_ object has only one concern, which is to open before any nested _`async-function`_ s start and to close after any nested _`async-function`_ complete. In order to be useful within other _`async-function`_ s, the object must not have any blocking functions.
 
-An `@_async-resource_@` can be thought of as an async-RAII object.
+An _`async-resource`_ can be thought of as an async-RAII object.
 
-What is an `@_async-resource_@`?
+What is an _`async-resource`_?
 ----------------------------
 
-An `@_async-resource_@` is an object with state that is valid for all the 
-`@_async-function_@`s that are nested within the `@*async_resource*@` expression. 
+An _`async-resource`_ is an object with state that is valid for all the 
+_`async-function`_ s that are nested within the _`async-resource`_ expression. 
 
 Examples include:
 
@@ -42,67 +42,67 @@ Motivation
 
 It is becoming apparent that all the sender/receiver features are language features being implemented in library.
 
-Sender/Receiver itself is the implementation of an `@_async-function_@`. It supports values and errors and cancellation. It also requires manual memory management in implementations because `@_async-resource_@`s do not fit inside any single block in the language.
+Sender/Receiver itself is the implementation of an _`async-function`_. It supports values and errors and cancellation. It also requires manual memory management in implementations because _`async-resource`_ s do not fit inside any single block in the language.
 
-A major precept of [@P2300R6] is structured concurrency. The `let_value()` algorithm provides stable storage for values produced by the input `@_async-function_@`. What is missing is a way to attach an object to a sender expression such that the object is opened before nested `@_async-function_@`s start and is closed after nested `@_async-function_@`s complete. This is commonly done in async programs using `std::shared_ptr` to implement ad-hoc garbage collection. Using garbage collection for this purpose removes structure from the code, because the shared ownership is unstructured and allows objects to escape the original scope in which they were created.
+A major precept of [@P2300R6] is structured concurrency. The `let_value()` algorithm provides stable storage for values produced by the input _`async-function`_. What is missing is a way to attach an object to a sender expression such that the object is opened before nested _`async-function`_ s start and is closed after nested _`async-function`_ s complete. This is commonly done in async programs using `std::shared_ptr` to implement ad-hoc garbage collection. Using garbage collection for this purpose removes structure from the code, because the shared ownership is unstructured and allows objects to escape the original scope in which they were created.
 
 The C++ language has a set of rules that are applied in a code-block to describe when construction and destruction occur, and when values are valid. The language implements those rules.
 
-This paper describes how to implement rules for the construction and destruction of async objects in the library. This paper describes structured construction and destruction of objects in terms of `@_async-function_@`s. The `use_resources()` algorithm described in this paper is a library implementation of an async code-block containing one or more local variables. The `use_resources()` algorithm is somewhat analogous to the `using` keyword in some languages.
+This paper describes how to implement rules for the construction and destruction of async objects in the library. This paper describes structured construction and destruction of objects in terms of _`async-function`_ s. The `use_resources()` algorithm described in this paper is a library implementation of an async code-block containing one or more local variables. The `use_resources()` algorithm is somewhat analogous to the `using` keyword in some languages.
 
 Design
 ======
 
-What are the requirements for an `@_async-resource_@`?
+What are the requirements for an _`async-resource`_?
 --------------------------------------------------
 
 **async construction**
 
-Some objects have `@_async-function_@`s to establish a connection, open a file, etc..
+Some objects have _`async-function`_ s to establish a connection, open a file, etc..
 
-The design must allow for `@_async-function_@`s to be used during construction - without blocking any threads (this means that C++ constructors are unable to meet this requirement)
+The design must allow for _`async-function`_ s to be used during construction - without blocking any threads (this means that C++ constructors are unable to meet this requirement)
 
 **async destruction**
 
-Some objects have `@_async-function_@`s to teardown a connection, flush a file, etc..
+Some objects have _`async-function`_ s to teardown a connection, flush a file, etc..
 
-The design must allow for `@_async-function_@`s to be used during destruction - without blocking any threads (this means that C++ destructors are unable to meet this requirement)
+The design must allow for _`async-function`_ s to be used during destruction - without blocking any threads (this means that C++ destructors are unable to meet this requirement)
 
 **structured and correct-by-construction**
 
 These are derived from the rules in the language.
 
 The object will not be available until it has been constructed. 
-The object will not be available until the object is contained in an `@_async-function_@`.
-Failures of `@_async-construction_@` and `@_async-destruction_@` will complete to the containing `@_async-function_@` with the error.
-The object will always complete cleanup before completing to the containing `@_async-function_@`.
-Acquiring an object is a no-fail `@_async-function_@`.
+The object will not be available until the object is contained in an _`async-function`_.
+Failures of _`async-construction`_ and _`async-destruction`_ will complete to the containing _`async-function`_ with the error.
+The object will always complete cleanup before completing to the containing _`async-function`_.
+Acquiring an object is a no-fail _`async-function`_.
 
-*`@_composition_@`*
+**composition**
 
 Multiple object will be available at the same time without nesting.
-Composition will support concurrent `@_async-construction_@` of multiple objects.
-Composition will support concurrent `@_async-destruction_@` of multiple objects.
+Composition will support concurrent _`async-construction`_ of multiple objects.
+Composition will support concurrent _`async-destruction`_ of multiple objects.
 Dependencies between objects will be expressed by nesting.
 Concurrency between objects will be expressed by algorithms like `when_all` and `use_resources()`.
 
-What is the concept that an `@_async-resource_@` must satisfy?
+What is the concept that an _`async-resource`_ must satisfy?
 ----------------------------------------------------------
 
-There are two options for defining the `@_async-resource_@` concept that are described here. Either one will satisfy the requirements.
+There are two options for defining the _`async-resource`_ concept that are described here. Either one will satisfy the requirements.
 
-### Option A - run(), open(), and close()
+### Option A - `run()`, `open()`, and `close()`
 
 This option uses three new CPOs in two concepts that describe the lifetime 
-of an `@_async-resource_@`.
+of an _`async-resource`_.
 
-The `open()` and `close()` `@_async-function_@`s do no work and never complete with an error. The `open()` and `close()` `@_async-function_@`s provide access to signals from the internal states of the `run()` `@_async-function_@` before it completes.
+The `open()` and `close()` _`async-function`_ s do no work and never complete with an error. The `open()` and `close()` _`async-function`_ s provide access to signals from the internal states of the `run()` _`async-function`_ before it completes.
 
 This option depends only on [@P2300R6]
 
-#### async_resource Concept:
+#### `async_resource` Concept:
 
-An `@_async-resource_@` stores the state used to open and run a resource.
+An _`async-resource`_ stores the state used to open and run a resource.
 
 ```cpp
 /// @brief the async-resource concept definition
@@ -139,9 +139,9 @@ using run_t = /*implementation-defined/*;
 inline static constexpr run_t run{};
 ```
 
-#### async_resource_token Concept:
+#### `async_resource_token` Concept:
 
-An `@_async-resource-token_@` is a non-owning handle to the resource that is provided after the resource has been opened.
+An _`async-resource-token`_ is a non-owning handle to the resource that is provided after the resource has been opened.
 
 The token must be used to close the resource once the resource has been opened.
 
@@ -165,12 +165,12 @@ using close_t = /*implementation-defined/*;
 inline static constexpr close_t close{};
 ```
 
-### Option B - run() -> `@_sequence-sender_@`
+### Option B - `run() -> ` _`sequence-sender`_
 
 This option uses one new CPO in one concept that describes the lifetime 
-of an `@_async-resource_@`.
+of an _`async-resource`_.
 
-This option depends on a paper that adds `@_sequence-sender_@` on top of [@P2300R6]
+This option depends on a paper that adds _`sequence-sender`_ on top of [@P2300R6]
 
 ```cpp
 /// @brief the async-resource concept definition
@@ -202,11 +202,11 @@ inline static constexpr run_t run{};
 What is the rational for this design?
 -------------------------------------
 
-This rational targets Option A. Exchanging the `open` mentions for the emission of the `@_async-resource-token_@` item and `close` mentions for the completion of the sender expression that uses the `@_async-resource-token_@` will describe the rational for Option B.
+This rational targets Option A. Exchanging the `open()` mentions for the emission of the _`async-resource-token`_ item and `close()` mentions for the completion of the sender expression that uses the _`async-resource-token`_ will describe the rational for Option B.
 
 ### run(), open(), and close()
 
-The rationale for this design is that it unifies and generalizes asynchronous construction and destruction, making the construction adaptable via sender algorithms. Its success cases are handled by what follows an `open()` `@_async-function_@`, its failure cases are handled as results of the `run()` `@_async-function_@`. The success case isn't run at all if `run()` fails (which completes `open()` with `set_stopped()`), quite like what follows RAII initialization isn't performed if the RAII initialization fails.
+The rationale for this design is that it unifies and generalizes asynchronous construction and destruction, making the construction adaptable via sender algorithms. Its success cases are handled by what follows an `open()` _`async-function`_, its failure cases are handled as results of the `run()` _`async-function`_. The success case isn't run at all if `run()` fails (which completes `open()` with `set_stopped()`), quite like what follows RAII initialization isn't performed if the RAII initialization fails.
 
 Furthermore, asynchronous resources are acquired only when needed by asynchronous work, and that acquisition can itself be asynchronous. As a practical example, consider a thread pool that has a static amount of threads in it. With this approach, the threads can be spun up when needed by asynchronous work, and no sooner - and the threads are spun up asynchronously, without blocking, but the "success" case, i.e. the code that uses the threads, is run after the threads have been spun up.
 
@@ -217,37 +217,37 @@ How do these CPOs compose to provide an async resource?
 
 ### run(), open(), and close()
 
-The `open()` `@_async-function_@` and the `run()` `@_async-function_@` are invoked concurrently.
+The `open()` _`async-function`_ and the `run()` _`async-function`_ are invoked concurrently.
 
-After both of the `open()` and `run()` `@_async-function_@`s are started, `run()` 
-invokes any `@_async-function_@` that is needed to initialize the `@_async-resource_@`. 
+After both of the `open()` and `run()` _`async-function`_ s are started, `run()` 
+invokes any _`async-function`_ that is needed to initialize the _`async-resource`_. 
 
-After all those `@_async-function_@`s complete, then `run()` signals to `open()` which then will complete with the `@_async-resource-token_@`.
+After all those _`async-function`_ s complete, then `run()` signals to `open()` which then will complete with the _`async-resource-token`_.
 
 `run()` will complete after the following steps:
 
 - the runtime has entered the `main()` function (requires a signal from the runtime)
-- any `@_async-function_@` needed to open the `@_async-resource_@` has completed
+- any _`async-function`_ needed to open the _`async-resource`_ has completed
 
-  **at this point, the `@_async-resource_@` lifetime begins**
+  **at this point, the _`async-resource`_ lifetime begins**
 
-- `open()` completes with the `@_async-resource-token_@`
+- `open()` completes with the _`async-resource-token`_
 - a stop condition is encountered
   - a `stop_token`, provided by the environment that invoked `open()`, is in the 
     `stop_requested()` state 
   
-  *`@_OR_@`* 
+  *_`OR`_* 
   
-  - the `close()` `@_async-function_@` has been invoked 
+  - the `close()` _`async-function`_ has been invoked 
   
-  *`@_OR_@`* 
+  *_`OR`_* 
   
   - the runtime has exited the `main()` function (this requires a signal 
     from the runtime)
 
-  **at this point, the `@_async-resource_@` lifetime ends**
+  **at this point, the _`async-resource`_ lifetime ends**
 
-- any `@_async-function_@` needed to close the `@_async-resource_@` have completed
+- any _`async-function`_ needed to close the _`async-resource`_ have completed
 
 - `close()` completes
 
@@ -286,40 +286,40 @@ title run(), open(), and close() activity
 -->(*)
 ```
 
-### run() -> `@_sequence-sender_@`
+### run() -> _`sequence-sender`_
 
-`run()` is an `@_async-function_@` aka `@_run-function_@`.
+`run()` is an _`async-function`_ aka _`run-function`_.
 
-After the `@_run-function_@` is invoked, it starts any `@_async-function_@` 
-that are needed to initialize the `@_async-resource_@`. 
+After the _`run-function`_ is invoked, it starts any _`async-function`_ 
+that are needed to initialize the _`async-resource`_. 
 
-After all those `@_async-function_@` complete, the `@_run-function_@` will 
-emit the `@_async-resource-token_@` as the only item in the sequence.
+After all those _`async-function`_ complete, the _`run-function`_ will 
+emit the _`async-resource-token`_ as the only item in the sequence.
 
-The `@_run-function_@`, will complete after the following steps:
+The _`run-function`_, will complete after the following steps:
 
 - the runtime has entered the `main()` function (this requires a signal from the runtime)
-- any `@_async-function_@` needed to open the `@_async-resource_@` has completed
+- any _`async-function`_ needed to open the _`async-resource`_ has completed
 
-  **at this point, the `@_async-resource_@` lifetime begins**
+  **at this point, the _`async-resource`_ lifetime begins**
 
-- the `@_async-resource-token_@` item is emitted
+- the _`async-resource-token`_ item is emitted
 - a stop condition is encountered
-  - a `stop_token`, provided by the environment of the `@_open-function_@`, is in the 
+  - a `stop_token`, provided by the environment of the _`open-function`_, is in the 
     `stop_requested()` state 
 
-  *`@_OR_@`* 
+  *_`OR`_* 
 
-  - the `@_token-operation_@`, produced by the sender expression for 
-    the `@_async-resource-token_@` item, has completed 
+  - the _`token-operation`_, produced by the sender expression for 
+    the _`async-resource-token`_ item, has completed 
 
-  *`@_OR_@`* 
+  *_`OR`_* 
 
   - the runtime has exited the `main()` function (this requires a signal from the runtime)
 
-  **at this point, the `@_async-resource_@` lifetime ends**
+  **at this point, the _`async-resource`_ lifetime ends**
 
-- any `@_async-function_@` needed to close the `@_async-resource_@` have completed
+- any _`async-function`_ needed to close the _`async-resource`_ have completed
 
 #### Activity diagram 
 
@@ -345,7 +345,7 @@ title "run() -> sequence-sender activity"
 -->(*)
 ```
 
-How do you use an `@_async-resource_@`?
+How do you use an _`async-resource`_?
 -----------------------------------
 
 Here is a basic example of composing resources using this pattern:
@@ -388,7 +388,7 @@ int main() {
 }
 ```
 
-### run() -> `@_sequence-sender_@`
+### run() -> _`sequence-sender`_
 
 ```cpp
 int main() {
@@ -420,10 +420,10 @@ int main() {
 
 :::
 
-This pattern correctly scopes the use of the `@_async-resource_@` and composes
-the open, run, and close `@_async-function_@`s correctly.
+This pattern correctly scopes the use of the _`async-resource`_ and composes
+the open, run, and close _`async-function`_ s correctly.
 
-It is possible to compose multiple `@_async-resource_@`s into the same block or
+It is possible to compose multiple _`async-resource`_ s into the same block or
 expression.
 
 ::: tonytable
@@ -476,7 +476,7 @@ std::this_thread::sync_wait(
     run(as), run(askt), run(spl)));
 ```
 
-### run() -> `@_sequence-sender_@`
+### run() -> _`sequence-sender`_
 
 ```cpp
 stop_source_resource stp;
@@ -546,61 +546,61 @@ std::this_thread::sync_wait(
 Why this design?
 ================
 
-There have been many, many design options explored for the `counting_scope` proposed in [@P2519R0]. We had a few variations of a single object with methods, then two objects with methods. It was at this point that a pattern began to form across `stop_source`/`stop_token`, `@_execution-context_@`/`scheduler`, `@_async-scope_@`/`@_async-scope-token_@`.
+There have been many, many design options explored for the `counting_scope` proposed in [@P2519R0]. We had a few variations of a single object with methods, then two objects with methods. It was at this point that a pattern began to form across `stop_source`/`stop_token`, _`execution-context`_/`scheduler`, _`async-scope`_/_`async-scope-token`_.
 
-The patterns proposed in this design model RAII for objects used by `@_async-function_@`s. 
+The patterns proposed in this design model RAII for objects used by _`async-function`_ s. 
 
-In C++, RAII works by attaching the constructor and destructor to a block of code in a function. This pattern uses the `run()` `@_async-function_@` to represent the block in which the object is contained. The `run()` `@_async-function_@` satisfies the structure requirement (only nested `@_async-function_@`s use the object) and satisfies the correct-by-construction requirement (the object is not available until the `run()` `@_async-function_@` is started and the object is closed when all nested `@_async-function_@`s complete).
+In C++, RAII works by attaching the constructor and destructor to a block of code in a function. This pattern uses the `run()` _`async-function`_ to represent the block in which the object is contained. The `run()` _`async-function`_ satisfies the structure requirement (only nested _`async-function`_ s use the object) and satisfies the correct-by-construction requirement (the object is not available until the `run()` _`async-function`_ is started and the object is closed when all nested _`async-function`_ s complete).
 
-## run(), open(), and close()
+## `run()`, `open()`, and `close()`
 
-The run/open/close option uses an `@_async-function_@` to store the object (`run()`), another `@_async-function_@` to access the object (`open()`), and a final `@_async-function_@` to stop the object (`close()`). `open()` is not a constructor and `close()` is not a destructor. `open()` and `close()` are signals. `open()` signals that the object is ready to use and `close()` signals that the object is no longer needed. Any errors encountered in the object cause the `run()` `@_async-function_@` to complete with the error, but only after completing any cleanup `@_async-function_@`s needed.
+The `run()`/`open()`/`close()` option (Option A) uses an _`async-function`_ to store the object (`run()`), another _`async-function`_ to access the object (`open()`), and a final _`async-function`_ to stop the object (`close()`). `open()` is not a constructor and `close()` is not a destructor. `open()` and `close()` are signals. `open()` signals that the object is ready to use and `close()` signals that the object is no longer needed. Any errors encountered in the object cause the `run()` _`async-function`_ to complete with the error, but only after completing any cleanup _`async-function`_ s needed.
 
 ### The open cpo
 
-`open` does not perform a task, its completion is a signal that `run` has successfully constructed the resource.
+`open()` does not perform a task, its completion is a signal that `run()` has successfully constructed the resource.
 
-Existing resources, like `run_loop` and `stop_source` have a method that returns a token. This does not provide for any `@_async-function_@`s that are required before a token is valid.
+Existing resources, like `run_loop` and `stop_source` have a method that returns a token. This does not provide for any _`async-function`_ s that are required before a token is valid.
 
-`open` is an `@_async-function_@` that provides the token only after token is valid.
+`open()` is an _`async-function`_ that provides the token only after token is valid.
 
-`open` completes when the token is valid. All `@_async-function_@`s using the token must be nested within the `run` `@_async-function_@` (yes, it is the run `@_async-function_@` that owns the resource, not the open `@_async-function_@`).
+`open()` completes when the token is valid. All _`async-function`_ s using the token must be nested within the `run()` _`async-function`_ (yes, it is the run _`async-function`_ that owns the resource, not the open _`async-function`_).
 
-The receiver passed to the `open` `@_async-function_@` is used to query services as needed (allocator, scheduler, stop-token, etc..)
+The receiver passed to the `open()` _`async-function`_ is used to query services as needed (allocator, scheduler, _`stop-token`_, etc..)
 
 ### The run cpo
 
-`open` may start before the resource is constructed and completes when the token is valid. `run` starts before the resources is constructed and completes after the token is closed. The `run` `@_async-function_@` represents the entire resource. The `run` `@_async-function_@` includes construction, open, resource usage, and close. `run` is the owner of the resource, `open` is the token accessor, `close` is the signal to stop the resource.
+`open()` may start before the resource is constructed and completes when the token is valid. `run()` starts before the resources is constructed and completes after the token is closed. The `run()` _`async-function`_ represents the entire resource. The `run()` _`async-function`_ includes construction, open, resource usage, and close. `run()` is the owner of the resource, `open()` is the token accessor, `close()` is the signal to stop the resource.
 
-`open` cannot represent the resource because it will complete before the resource reaches the closed state.
+`open()` cannot represent the resource because it will complete before the resource reaches the closed state.
 
-`close` cannot represent the resource because it cannot begin until after open has completed.
+`close()` cannot represent the resource because it cannot begin until after open has completed.
 
 ### The close cpo
 
-`close` does not perform a task, its invocation is a signal that requests that the resource safely destruct.
+`close()` does not perform a task, its invocation is a signal that requests that the resource safely destruct.
 
-`close` is used to start any `@_async-function_@`s that stop the resource and invalidate the token. After the `close` `@_async-function_@` completes the `run` `@_async-function_@` runs the destructor of the resource and completes.
+`close()` is used to start any _`async-function`_ s that stop the resource and invalidate the token. After the `close()` _`async-function`_ completes the `run()` _`async-function`_ runs the destructor of the resource and completes.
 
 ### Composition
 
-The `open` and `close` cpos are not the only way to compose the token into a sender expression.
+The `open()` and `close()` cpos are not the only way to compose the token into a sender expression.
 
-The benefit provided by the `open` and `close` `@_async-function_@`s is that a `when_all` of multiple `open`s and a `when_all` of multiple `close`s can be used to access multiple tokens without nesting each token inside the prev.
+The benefit provided by the `open()` and `close()` _`async-function`_ s is that a `when_all` of multiple `open()`s and a `when_all` of multiple `close()`s can be used to access multiple tokens without nesting each token inside the prev.
 
 ### Structure
 
-The `run`, `open`, and `close` `@_async-function_@`s provide the token in a structured manner. The token is not available until the `run` `@_async-function_@` has started and the `open` `@_async-function_@` has completed. The `run` will not complete until the `close` `@_async-function_@` is started. This structure makes using the resource correct-by-construction. There is no resource until the `run` and `open` `@_async-function_@`s are started. The `run` `@_async-function_@` will not complete until the `close` `@_async-function_@` completes.
+The `run()`, `open()`, and `close()` _`async-function`_ s provide the token in a structured manner. The token is not available until the `run()` _`async-function`_ has started and the `open()` _`async-function`_ has completed. The `run()` will not complete until the `close()` _`async-function`_ is started. This structure makes using the resource correct-by-construction. There is no resource until the `run()` and `open()` _`async-function`_ s are started. The `run()` _`async-function`_ will not complete until the `close()` _`async-function`_ completes.
 
 Ordering of constructors and destructors is expressed by nesting resources explicitly. Using `when_all` to compose resources concurrently requires that the resources are independent because there is no token to the resource available until the `when_all` completes.
 
-## run() -> `@_sequence-sender_@`
+## `run() -> ` _`sequence-sender`_
 
-The run/sequence-sender option uses an `@_async-function_@` to store the object (`run()`). The sequence produces one item that provides access to the object once it is ready to use. When the item has been consumed, `run()` will cleanup the object and complete. Any errors encountered in the object cause the `run()` `@_async-function_@` to complete with the error, but only after completing any cleanup `@_async-function_@`s needed.
+The `run() -> ` _`sequence-sender`_ option (Option B), uses an _`async-function`_ to store the object (`run()`). The sequence produces one item that provides access to the object once it is ready to use. When the item has been consumed, `run()` will cleanup the object and complete. Any errors encountered in the object cause the `run()` _`async-function`_ to complete with the error, but only after completing any cleanup _`async-function`_ s needed.
 
 ### The run cpo
 
-`run` starts before the resource is constructed and completes after all nested `@_async-function_@`s have completed and the object has finished any cleanup `@_async-function_@`. The `run` `@_async-function_@` represents the entire resource. The `run` `@_async-function_@` includes construction, resource usage, and destruction. `run` is the owner of the resource.
+`run()` starts before the resource is constructed and completes after all nested _`async-function`_ s have completed and the object has finished any cleanup _`async-function`_. The `run()` _`async-function`_ represents the entire resource. The `run()` _`async-function`_ includes construction, resource usage, and destruction. `run()` is the owner of the resource.
 
 ### Composition
 
@@ -608,32 +608,32 @@ Composition is easily achieved using the `zip()` algorithm and the `let_value_ea
 
 ### Structure
 
-The `run` `@_async-function_@` provides the object in a structured manner. The object is not available until the `run` `@_async-function_@` has started. The `run()` `@_async-function_@` will not complete until the object is no longer in use. This structure makes using the resource correct-by-construction. There is no resource until the `run()` `@_async-function_@` is invoked. The `run()` `@_async-function_@` completes after all nested `@_async-function_@`s have completed and the object has finished any cleanup `@_async-function_@`.
+The `run()` _`async-function`_ provides the object in a structured manner. The object is not available until the `run()` _`async-function`_ has started. The `run()` _`async-function`_ will not complete until the object is no longer in use. This structure makes using the resource correct-by-construction. There is no resource until the `run()` _`async-function`_ is invoked. The `run()` _`async-function`_ completes after all nested _`async-function`_ s have completed and the object has finished any cleanup _`async-function`_.
 
 Ordering of constructors and destructors is expressed by nesting resources explicitly. Using the `zip()` algorithm to compose resources concurrently requires that the resources are independent because there is no token to the resource available until the `zip()` algorithm completes.
 
 Implementation Experience
 =========================
 
-There are many implementations of `@_async-scope_@`. There is one in [@follygithub] and one in [@stdexecgithub]. Each is different, as the design space was being explored. Some are in use in large-scale production. 
+There are many implementations of _`async-scope`_. There is one in [@follygithub] and one in [@stdexecgithub]. Each is different, as the design space was being explored. Some are in use in large-scale production. 
 
-Resources that implement both option a and option b have been implemented while writing this paper. Implementing resources with option a is much more complicated and difficult than writing the same resource with option b.
+Resources that implement both Option A and Option B have been implemented while writing this paper. Implementing resources with Option A is much more complicated and difficult than writing the same resource with Option B.
 
-Prioritizing sequence-sender will make option b the obvious choice. 
+Prioritizing _`sequence-sender`_ will make Option B the obvious choice. 
 
-option a is a fallback in the case where sequence-sender is delayed or rejected.
+Option A is a fallback in the case where _`sequence-sender`_ is delayed or rejected.
 
 Entry and exit signals for `main()`
 ===================================
 
-The steps for the `run()` `@_async-function_@` on an `@_async-resource_@` include requiring that `main()` has been entered before `@_async-constructor_@`s are invoked and that `main()` exit must signal all `@_async-resource_@`s when `main()` exits.
+The steps for the `run()` _`async-function`_ on an _`async-resource`_ include requiring that `main()` has been entered before _`async-constructor`_ s are invoked and that `main()` exit must signal all _`async-resource`_ s when `main()` exits.
 
 ```cpp
 // function object that returns a sender_of<void> that will 
 // complete when main() is invoked and immediately when main() 
 // has already been invoked
 struct main_enter_t {
-  @@`@_implementation-defined_@`@@ operator()();
+  /*@@_implementation-defined_@@*/ operator()();
 };
 static inline constexpr main_enter_t main_enter{};
 
@@ -641,7 +641,7 @@ static inline constexpr main_enter_t main_enter{};
 // complete when main() has returned and immediately when main() 
 // has already returned
 struct main_exit_t {
-  @@`@_implementation-defined_@`@@ operator()();
+  /*@@_implementation-defined_@@*/ operator()();
 };
 static inline constexpr main_exit_t main_exit{};
 ```
@@ -659,7 +659,7 @@ The Static-Initialization-Fiasco is already harmful in single threaded programs,
 
 These unstructured invocations on a static object then cause crashes, deadlocks, and even construction of new static object instances of already destructed objects during program exit.
 
-The purpose of `@_async-resource_@` is to create structure for asynchronous objects. Using `@_async-function_@`s and `@_async-resource_@`s to add structure to statically initialized objects can be used to impose structure across static objects for multi threaded and single threaded programs. 
+The purpose of _`async-resource`_ is to create structure for asynchronous objects. Using _`async-function`_ s and _`async-resource`_ s to add structure to statically initialized objects can be used to impose structure across static objects for multi threaded and single threaded programs. 
 
 System Execution Context
 ========================
@@ -668,11 +668,11 @@ System Execution Context
 
 There are design discussions around how the `system_context` object itself will be accessed. It has been shown that at least one std library implementation can produce the system_context as a global object initialized prior to invoking static initializers. Allocators are similarly available before static initializers are invoked.
 
-There may be `@_async-scope_@` [@P2519R0] and `@_stop-source_@` instances provided by the std library as well.
+There may be _`async-scope`_ [@P2519R0] and _`stop-source`_ instances provided by the std library as well.
 
 Now the pre-static-initialization objects (`allocator`, `stop_source`, `system_scope`, `system_context`) need to be structured. Which is allowed to depend on the others? In which order are the constructor and destructor of each invoked? How does a program that does not use one of these system objects prevent them from being constructed (pay only for what you use)?
 
-The system objects are resources. Implementing system resource objects as `@_async-resources_@` provides structured construction and structured destruction and pay-only-for-what-you-use.
+The system objects are resources. Implementing system resource objects as _`async-resource`_ s provides structured construction and structured destruction and pay-only-for-what-you-use.
 
 
 ```cpp
@@ -681,7 +681,7 @@ public:
   system_scheduler();
   ~system_scheduler();
 
-  using self_t = system_scheduler; @@`@_exposition-only_@`@@
+  using self_t = system_scheduler; /*@@_exposition-only_@@*/
 
   system_scheduler(const self_t&);
   system_scheduler(self_t&&);
@@ -691,7 +691,7 @@ public:
   bool operator==(const self_t&) const noexcept;
 
   // returns sender_of<void>
-  @@`@_implementation-defined_@`@@ @@`@_customization-point_@`@@(decays_to<self_t> auto&&, schedule_t);
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(decays_to<self_t> auto&&, schedule_t);
 };
 
 class system_execution {
@@ -699,7 +699,7 @@ public:
   system_execution();
   ~system_execution();
 
-  using self_t = system_execution; @@`@_exposition-only_@`@@
+  using self_t = system_execution; /*@@_exposition-only_@@*/
 
   system_execution(const self_t&);
   system_execution(self_t&&);
@@ -708,17 +708,17 @@ public:
 
   bool operator==(const self_t&) const noexcept;
 
-  size_t @@`@_customization-point_@`@@(decays_to<self_t> const auto&, get_max_concurrency_t);
+  size_t /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_max_concurrency_t);
 
-  bool @@`@_customization-point_@`@@(decays_to<self_t> const auto&, get_completes_inline_t);
+  bool /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_completes_inline_t);
 
-  bool @@`@_customization-point_@`@@(decays_to<self_t> const auto&, get_completes_before_invoke_returns_t);
+  bool /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_completes_before_invoke_returns_t);
 
-  bool @@`@_customization-point_@`@@(decays_to<self_t> const auto&, get_completes_on_same_t);
+  bool /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_completes_on_same_t);
 
-  bool @@`@_customization-point_@`@@(decays_to<self_t> const auto&, get_completes_on_any_t);
+  bool /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_completes_on_any_t);
 
-  system_scheduler @@`@_customization-point_@`@@(decays_to<self_t> const auto&, get_scheduler_t);
+  system_scheduler /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_scheduler_t);
 };
 
 class system_execution_resource {
@@ -726,7 +726,7 @@ public:
   system_execution_resource();
   ~system_execution_resource();
 
-  using self_t = system_execution_resource; @@`@_exposition-only_@`@@
+  using self_t = system_execution_resource; /*@@_exposition-only_@@*/
 
   system_execution_resource(const self_t&);
   system_execution_resource(self_t&&);
@@ -735,15 +735,15 @@ public:
 
   using token_t = system_execution;
 
-  // returns sequence_sender_of<token_t> (async-resource option b)
-  @@`@_implementation-defined_@`@@ @@`@_customization-point_@`@@(decays_to<self_t> auto&&, run_t);
+  // returns sequence_sender_of<token_t> (/*@@_async-resource_@@*/ Option B)
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(decays_to<self_t> auto&&, run_t);
 };
 ```
 
 `main()` 
 ========
 
-When system resources are implemented as `@_async-resource_@` a program that is safe for single threaded and multi threaded programs might implement `main()` in this way:
+When system resources are implemented as _`async-resource`_ a program that is safe for single threaded and multi threaded programs might implement `main()` in this way:
 
 ```cpp
 int main() {
@@ -774,20 +774,20 @@ Algorithms
 
 The `make_deferred` algorithm packages the constructor arguments for a potentially immovable type `T` and provides `void operator()()` that will construct `T` with the stored arguments when it is invoked.
 
-The `make_deferred` algorithm returns a `@_deferred-object_@` that contains storage for `T` and for `ArgN...`.
+The `make_deferred` algorithm returns a _`deferred-object`_ that contains storage for `T` and for `ArgN...`.
 
-Before `T` is constructed, the `@_deferred-object_@` copies and moves if the stored `ArgN...` supports those operations.
+Before `T` is constructed, the _`deferred-object`_ copies and moves if the stored `ArgN...` supports those operations.
 
-When the `@_deferred-object_@` is invoked as a function taking no arguments, `T` is constructed in the reserved storage for `T` using the `ArgN...` stored in the `@_deferred-object_@` when it was constructed.
+When the _`deferred-object`_ is invoked as a function taking no arguments, `T` is constructed in the reserved storage for `T` using the `ArgN...` stored in the _`deferred-object`_ when it was constructed.
 
-Once `T` is constructed, attempts to copy and move the `@_deferred-object_@` will `terminate()`.
+Once `T` is constructed, attempts to copy and move the _`deferred-object`_ will `terminate()`.
 
-Once `T` is constructed in the `@_deferred-object_@`, `T` can be accessed with `T& operator->()` and `T& value()` and eagerly destructed with `void reset()`.
+Once `T` is constructed in the _`deferred-object`_, `T` can be accessed with `T& operator->()` and `T& value()` and eagerly destructed with `void reset()`.
 
 ```cpp
 struct make_deferred_t {
   template<class T, class... ArgN>
-  @@`@_implementation-defined_@`@@ operator()(ArgN&&... argN) const;
+  /*@@_implementation-defined_@@*/ operator()(ArgN&&... argN) const;
 };
 static inline constexpr make_deferred_t make_deferred{};
 ```
@@ -795,16 +795,16 @@ static inline constexpr make_deferred_t make_deferred{};
 `use_resources`
 ---------------
 
-The `use_resources` algorithm composes multiple `@_async-resources_@` into one `@_async-function_@` that is returned as a sender.
+The `use_resources` algorithm composes multiple _`async-resource`_ s into one _`async-function`_ that is returned as a sender.
 
-The `use_resources` algorithm will use the selected option (run-open-close or run-sequence-sender) to apply all the `@_async-resource-token_@`s for the constructed `@_async-resource_@`s to the single `@_body-function_@`.
+The `use_resources` algorithm will use the selected option (Option A or Option B) to apply all the _`async-resource-token`_ s for the constructed _`async-resource`_ s to the single _`body-function`_.
 
-When the returned `@_async-function_@` is invoked, it will invoke all the deferred `@_async-resource_@`s to construct them in its `@_operation-state_@` and then it will acquire the `@_async-resource-token_@` for each `@_async-resource_@` and then invoke the `@_body-function_@` once with all the tokens.
+When the returned _`async-function`_ is invoked, it will invoke all the deferred _`async-resource`_ s to construct them in its _`operation-state`_ and then it will acquire the _`async-resource-token`_ for each _`async-resource`_ and then invoke the _`body-function`_ once with all the tokens.
 
 ```cpp
 struct use_resources_t {
   template<class Body, class... AsyncResourcesDeferred>
-  @@`@_implementation-defined_@`@@ operator()(Body&& body, AsyncResourcesDeferred&&... resources) const;
+  /*@@_implementation-defined_@@*/ operator()(Body&& body, AsyncResourcesDeferred&&... resources) const;
 };
 static inline constexpr use_resources_t use_resources{};
 ```
@@ -817,39 +817,39 @@ Rejected Options:
 
 - `join() -> sender`:
 
-  - `join()` returns a sender that completes after running any pending `@_async-function_@`s followed by invoking any `@_async-function_@`s needed to close the
-`@_async-resource_@`.
+  - `join()` returns a sender that completes after running any pending _`async-function`_ s followed by invoking any _`async-function`_ s needed to close the
+_`async-resource`_.
 
   - This option is challenging because it is not correct by construction:
 
     - Imposes that all users remember to compose `join()` into an `counting_scope`
       and prevent the destructor from running until `join()` completes.
-    - Provides no way to invoke `@_async-function_@`s to open the `@_async-resource_@`.
+    - Provides no way to invoke _`async-function`_ s to open the _`async-resource`_.
 
 - `run((token)->sender) -> sender`:
 
   - The sender returned from `run()` will complete after the following steps:
 
-    - `@_async-function_@`s to open the `@_async-resource_@`
+    - _`async-function`_ s to open the _`async-resource`_
 
-      ** at this point, `@_async-resource_@` lifetime begins **
+      ** at this point, _`async-resource`_ lifetime begins **
     
-    - an `@_async-resource-token_@` is passed to the provided function
+    - an _`async-resource-token`_ is passed to the provided function
     - the sender returned from the provided function
     
-      ** at this point, `@_async-resource_@` lifetime ends **
+      ** at this point, _`async-resource`_ lifetime ends **
 
-    - any `@_async-function_@`s needed to close the `@_async-resource_@`
+    - any _`async-function`_ s needed to close the _`async-resource`_
 
-  - This option scopes the use of the `@_async-resource_@` and composes the open and 
-    close `@_async-function_@`s correctly.
+  - This option scopes the use of the _`async-resource`_ and composes the open and 
+    close _`async-function`_ s correctly.
 
-  - It is hard to compose multiple `@_async-resource_@`s into the same block or
-    expression (requires nesting calls to `run()` for each `@_async-resource_@`, which
-    also sequences the open and close for each `@_async-resource_@`).
+  - It is hard to compose multiple _`async-resource`_ s into the same block or
+    expression (requires nesting calls to `run()` for each _`async-resource`_, which
+    also sequences the open and close for each _`async-resource`_).
 
-The order of invocations when using an async-resource
------------------------------------------------------
+The order of invocations when using an _`async-resource`_
+---------------------------------------------------------
 
 ### One resource
 
@@ -913,7 +913,7 @@ strg --> enc -- : complete storage
 deactivate enc
 ```
 
-#### run() -> `@_sequence-sender_@`
+#### `run() -> ` _`sequence-sender`_
 
 ```plantuml
 title "async-resource run() -> sequence-sender"
