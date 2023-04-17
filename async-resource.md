@@ -122,6 +122,7 @@ using open_t = /*implementation-defined/*;
 /// The sender provided by open() will not fail.
 /// @param async-resource&  
 /// @returns sender<resource-token>
+/**/
 inline static constexpr open_t open{};
 
 using run_t = /*implementation-defined/*;
@@ -134,6 +135,7 @@ using run_t = /*implementation-defined/*;
 /// the async-resource complete and the sender provided by close() is completed. 
 /// @param async-resource&  
 /// @returns sender<>
+/**/
 inline static constexpr run_t run{};
 ```
 
@@ -159,6 +161,7 @@ using close_t = /*implementation-defined/*;
 /// The sender provided by close() will not fail.
 /// @param async-resource-token&  
 /// @returns sender<>
+/**/
 inline static constexpr close_t close{};
 ```
 
@@ -192,6 +195,7 @@ using run_t = /*implementation-defined/*;
 /// will complete. 
 /// @param async-resource&  
 /// @returns sequence-sender<async-resource-token>
+/**/
 inline static constexpr run_t run{};
 ```
 
