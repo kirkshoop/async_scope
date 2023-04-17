@@ -236,11 +236,11 @@ After all those _`async-function`_ s complete, then `run()` signals to `open()` 
   - a `stop_token`, provided by the environment that invoked `open()`, is in the 
     `stop_requested()` state 
   
-  *_`OR`_* 
+  **`OR`** 
   
   - the `close()` _`async-function`_ has been invoked 
   
-  *_`OR`_* 
+  **`OR`** 
   
   - the runtime has exited the `main()` function (this requires a signal 
     from the runtime)
@@ -308,12 +308,12 @@ The _`run-function`_, will complete after the following steps:
   - a `stop_token`, provided by the environment of the _`open-function`_, is in the 
     `stop_requested()` state 
 
-  *_`OR`_* 
+  **`OR`** 
 
   - the _`token-operation`_, produced by the sender expression for 
     the _`async-resource-token`_ item, has completed 
 
-  *_`OR`_* 
+  **`OR`** 
 
   - the runtime has exited the `main()` function (this requires a signal from the runtime)
 
@@ -633,7 +633,7 @@ The steps for the `run()` _`async-function`_ on an _`async-resource`_ include re
 // complete when main() is invoked and immediately when main() 
 // has already been invoked
 struct main_enter_t {
-  /*@@_implementation-defined_@@*/ operator()();
+  /*@@_implementation-defined_@@*/ operator()() const noexcept;
 };
 static inline constexpr main_enter_t main_enter{};
 
@@ -641,7 +641,7 @@ static inline constexpr main_enter_t main_enter{};
 // complete when main() has returned and immediately when main() 
 // has already returned
 struct main_exit_t {
-  /*@@_implementation-defined_@@*/ operator()();
+  /*@@_implementation-defined_@@*/ operator()() const  noexcept;
 };
 static inline constexpr main_exit_t main_exit{};
 ```
@@ -691,7 +691,8 @@ public:
   bool operator==(const self_t&) const noexcept;
 
   // returns sender_of<void>
-  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(decays_to<self_t> auto&&, schedule_t);
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, schedule_t) noexcept;
 };
 
 class system_execution {
@@ -708,17 +709,24 @@ public:
 
   bool operator==(const self_t&) const noexcept;
 
-  size_t /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_max_concurrency_t);
+  size_t /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_max_concurrency_t) noexcept;
 
-  bool /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_completes_inline_t);
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_completes_inline_t) noexcept;
 
-  bool /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_completes_before_invoke_returns_t);
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, 
+    get_completes_before_invoke_returns_t) noexcept;
 
-  bool /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_completes_on_same_t);
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_completes_on_same_t) noexcept;
 
-  bool /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_completes_on_any_t);
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_completes_on_any_t) noexcept;
 
-  system_scheduler /*@@_customization-point_@@*/(decays_to<self_t> const auto&, get_scheduler_t);
+  system_scheduler /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_scheduler_t) noexcept;
 };
 
 class system_execution_resource {
@@ -735,10 +743,247 @@ public:
 
   using token_t = system_execution;
 
-  // returns sequence_sender_of<token_t> (/*@@_async-resource_@@*/ Option B)
-  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(decays_to<self_t> auto&&, run_t);
+  // returns sequence_sender_of<token_t> (@@_async-resource_@@ Option B)
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, run_t) noexcept;
 };
 ```
+
+`std::thread` and `std::jthread`
+================================
+
+`std::thread` and `std::jthread` have a `join()` method that blocks the calling thread. This does not compose well. If you have two `std::thread`/`std::jthread` then you can only `join()` one at a time - **serially**. Even worse `std::jthread` hides `request_stop()` and `join()` in its destructor. Two  `std::jthread` in the same scope will not even invoke request scope on the second `std::jthread` that exits the scope, until the first has completely stopped and joined. If each thread was an _`async-resource`_, then there would be no `join()` method and no threads would be blocked and all threads exiting a scope would be stopped concurrently with all other _`async-resources`_ exiting the same scope.
+
+```cpp
+class thread {
+public:
+  thread();
+  ~thread();
+
+  using self_t = thread; /*@@_exposition-only_@@*/
+
+  thread(const self_t&);
+  thread(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  bool operator==(const self_t&) const noexcept;
+
+  native_handle_type /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_native_handle_t) noexcept;
+
+  id /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_id_t) noexcept;
+};
+
+class thread_resource {
+public:
+  thread_resource();
+  ~thread_resource();
+
+  using self_t = thread_resource; /*@@_exposition-only_@@*/
+
+  thread_resource(const self_t&);
+  thread_resource(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  using token_t = thread;
+
+  // returns sequence_sender_of<token_t> (@@_async-resource_@@ Option B)
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, run_t) noexcept;
+};
+```
+
+**advantages**
+
+There is no way to `detach()` (the thread would become unstructured). 
+
+There is no `join()` method (the thread implicitly joins when the body completes)
+
+There is no embedded `std::stop_source` (an _`async-resource`_ has access to the _`stop-token`_ provided by the enclosing _`async-function`_).
+
+`std::stop_source`
+==================
+
+`std::stop_source` allocates shared state (it is similar to `std::promise`). `std::stop_source` has complicated locking semantics around destruction of the source, token and callback objects.
+
+```cpp
+class inplace_stop_state {
+public:
+  inplace_stop_state();
+  ~inplace_stop_state();
+
+  using self_t = inplace_stop_state; /*@@_exposition-only_@@*/
+
+  inplace_stop_state(const self_t&);
+  inplace_stop_state(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  bool operator==(const self_t&) const noexcept;
+
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_stop_requested_t) noexcept;
+
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_stop_possible_t) noexcept;
+
+  // returns sender_of<void>
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, stop_signal_t) noexcept;
+};
+
+class inplace_stop {
+public:
+  inplace_stop();
+  ~inplace_stop();
+
+  using self_t = inplace_stop; /*@@_exposition-only_@@*/
+
+  inplace_stop(const self_t&);
+  inplace_stop(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  bool operator==(const self_t&) const noexcept;
+
+  inplace_stop_state /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_stop_state_t);
+
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_stop_requested_t) noexcept;
+
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_stop_possible_t) noexcept;
+
+  // returns sender_of<void>
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, request_stop_t) noexcept;
+};
+
+class inplace_stop_resource {
+public:
+  inplace_stop_resource();
+  ~inplace_stop_resource();
+
+  using self_t = inplace_stop_resource; /*@@_exposition-only_@@*/
+
+  inplace_stop_resource(const self_t&);
+  inplace_stop_resource(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  using token_t = inplace_stop;
+
+  // returns sequence_sender_of<token_t> (@@_async-resource_@@ Option B)
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, run_t) noexcept;
+};
+```
+
+**advantages**
+
+There is no allocation required.
+
+The nested structure of the resource -> stop (source) -> stop-state (token) and the _`async-constructor`_ and _`async-destructor`_ combine to simplify the coordination between the objects.
+
+There is no callback object required. The callback object is replaced by `stop_signal()` _`async-function`_.
+
+`std::mutex`
+============
+
+`std::mutex` has a `lock()` method that blocks a thread and a `try_lock()` method that polls for a lock.
+
+```cpp
+class locked_mutex {
+public:
+  locked_mutex();
+  ~locked_mutex();
+
+  using self_t = locked_mutex; /*@@_exposition-only_@@*/
+
+  locked_mutex(const self_t&);
+  locked_mutex(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  bool operator==(const self_t&) const noexcept;
+
+  bool /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, owns_lock_t) noexcept;
+
+  // returns sender_of<mutex>
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, unlock_t) noexcept;
+};
+
+class locked_mutex_resource {
+public:
+  locked_mutex_resource();
+  ~locked_mutex_resource();
+
+  using self_t = locked_mutex_resource; /*@@_exposition-only_@@*/
+
+  locked_mutex_resource(const self_t&);
+  locked_mutex_resource(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  using token_t = locked_mutex;
+
+  // returns sequence_sender_of<token_t> (@@_async-resource_@@ Option B)
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, run_t) noexcept;
+};
+
+class mutex {
+public:
+  mutex();
+  ~mutex();
+
+  using self_t = mutex; /*@@_exposition-only_@@*/
+
+  mutex(const self_t&);
+  mutex(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  bool operator==(const self_t&) const noexcept;
+
+  locked_mutex_resource /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, lock_t);
+
+  native_handle_type /*@@_customization-point_@@*/(
+    decays_to<self_t> const auto&, get_native_handle_t) noexcept;
+};
+
+class mutex_resource {
+public:
+  mutex_resource();
+  ~mutex_resource();
+
+  using self_t = mutex_resource; /*@@_exposition-only_@@*/
+
+  mutex_resource(const self_t&);
+  mutex_resource(self_t&&);
+  self_t& operator=(const self_t&);
+  self_t& operator=(self_t&&);
+
+  using token_t = mutex;
+
+  // returns sequence_sender_of<token_t> (@@_async-resource_@@ Option B)
+  /*@@_implementation-defined_@@*/ /*@@_customization-point_@@*/(
+    decays_to<self_t> auto&&, run_t) noexcept;
+};
+```
+
+**advantages**
+
+There are no blocking functions.
+
+The `locked_mutex_resource` provides an async-RAII region where the mutex is locked (like `std::unique_lock`)
 
 `main()` 
 ========
