@@ -1,7 +1,7 @@
 ---
 title: "async-resource - aka async-RAII"
 subtitle: "Draft Proposal"
-document: D0000R0
+document: D2849R0
 date: today
 audience:
   - "LEWG Library Evolution"
