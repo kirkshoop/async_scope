@@ -26,9 +26,9 @@ Changes
 Introduction
 ============
 
-A major precept of [@P2300R6] is structured concurrency. The `start_detached` and `ensure_started` algorithms are motivated by some important scenarios. Not every asynchronous operation has a clear chain of work to consume or block on the result. The problem with these algorithms is that they provide unstructured concurrency. This is an unnecessary and unwelcome and undesirable property for concurrency. It leads to problems with lifetimes, and it requires execution contexts to conflate task lifetime management with execution management.
+A major precept of [@P2300R6] is structured concurrency. The `start_detached` and `ensure_started` algorithms are motivated by some important scenarios. Not every *async-function* has a clear chain of work to consume or block on the result. The problem with these algorithms is that they provide unstructured concurrency. This is an unnecessary and unwelcome and undesirable property for concurrency. It leads to problems with lifetimes, and it requires execution contexts to conflate task lifetime management with execution management.
 
-This paper describes an object that would be used to create a scope that will contain all senders spawned within its lifetime. These senders can be running on any execution context. The scope object has only one concern, which is to contain the spawned senders to a lifetime that is nested within any other resources that they depend on. In order to be useful within other asynchronous scopes, the object must not have any blocking functions. In practice, this means the scope serves three purposes. It:
+This paper describes an object that would be used to create a scope that will contain all senders spawned within its lifetime. These senders can be running on any execution context. The scope object has only one concern, which is to contain the spawned senders to a lifetime that is nested within any other resources that they depend on. In order to be useful within other *async-function*s, the object must not have any blocking functions. In practice, this means the scope serves three purposes. It:
 
  * maintains state for launched work so that all in-flight senders have a well-defined location in which to store an `@_operation-state_@`
  * manages lifetimes for launched work so that in-flight tasks may be tracked, independent of any particular execution context
@@ -38,7 +38,7 @@ This object would be used to spawn senders without waiting for each sender to co
 
 ## Implementation experience
 
-The general concept of an async scope to manage work has been deployed broadly in [@asyncscopefolly] to safely launch awaitables in [@corofolly] and in [@asyncscopeunifex] where it is designed to be used with the sender/receiver pattern.
+The general concept of an async scope to manage work has been deployed broadly in Meta's folly [@asyncscopefolly] to safely launch awaitables in Folly's coro library [@corofolly] and in Facebook's libunifex library [@asyncscopeunifex] where it is designed to be used with the sender/receiver pattern.
 
 Motivation
 ==========
@@ -77,11 +77,11 @@ Because the number of work items is dynamic, one is forced to use `start_detache
 [@P2300R6] doesn't provide any facilities to spawn dynamic work and return a sender (i.e., something like `when_all` but with a dynamic number of input senders).
 
 Using `start_detached()` here follows the *fire-and-forget* style, meaning that we have no control over the termination of the work being started.
-We don't have control over the lifetime of the operation being started.
+We don't have control over the lifetime of the *async-function* being started.
 
 At the end of the function, we are destroying the work context and the thread pool.
-But at that point, we don't know whether all the operations have completed.
-If there are still operations that are not yet complete, this might lead to crashes.
+But at that point, we don't know whether all the *async-function*s have completed.
+If there are still *async-function*s that are not yet complete, this might lead to crashes.
 
 [@P2300R6] doesn't give us out-of-the-box facilities to use in solving these types of problems.
 
@@ -206,7 +206,7 @@ void my_window::onClickClose() {
 ## Starting parallel work
 
 In this example we use the `counting_scope` within lexical scope to construct an algorithm that performs parallel work.
-This uses the [@letvwthunifex] algorithm implemented in [@libunifex] which simplifies in-place construction of a non-moveable object in the `let_value_with` algorithms operation state.
+This uses the `let_value_with` [@letvwthunifex] algorithm implemented in [@libunifex] which simplifies in-place construction of a non-moveable object in the `let_value_with` algorithms *operation-state*.
 Here foo launches 100 tasks that concurrently run on some scheduler provided to `foo`, through its connected receiver, and then are asynchronously joined.
 In this case the context the work is run on will be the `system_context`'s scheduler, from [@P2079R2].
 This structure emulates how we might build a parallel algorithm where each `some_work` might be operating on a fragment of data.
@@ -348,20 +348,20 @@ struct counting_scope {
     counting_scope& operator=(const counting_scope&) = delete;
     counting_scope& operator=(counting_scope&&) = delete;
 
-    template <sender_to<@_spawn-receiver_@> S>
+    template <sender_to<@@_spawn-receiver_@@> S>
     void spawn(S&& snd);
 
     template <sender S>
-    @*spawn-future-sender*@<S> spawn_future(S&& snd);
+    @@_spawn-future-sender_@@<S> spawn_future(S&& snd);
 
     template <sender S>
-    @*nest-sender*@<S> nest(S&& snd);
+    @@_nest-sender_@@<S> nest(S&& snd);
 
     [[nodiscard]]
-    @*on-empty-sender*@ on_empty() const noexcept;
+    @@_on-empty-sender_@@ on_empty() const noexcept;
     template <sender S>
     [[nodiscard]]
-    @*on-empty-sender*@<S> when_empty(S&& snd) const noexcept;
+    @@_on-empty-sender_@@<S> when_empty(S&& snd) const noexcept;
 
     in_place_stop_source& get_stop_source() noexcept;
     in_place_stop_token get_stop_token() const noexcept;
@@ -391,7 +391,7 @@ Please see [Q & A](#q-a) section for more details on reasons why calling `termin
 ## `spawn()`
 
 ```c++
-template <sender_to<@_spawn-receiver_@> S> void spawn(S&& s);
+template <sender_to<@@_spawn-receiver_@@> S> void spawn(S&& s);
 ```
 
 Eagerly launches work on the `counting_scope`.
@@ -422,7 +422,7 @@ return s.on_empty(); // completes when all work is done
 ## `spawn_future()`
 
 ```c++
-template <sender S> @_spawn-future-sender_@<S> spawn_future(S&& s);
+template <sender S> @@_spawn-future-sender_@@<S> spawn_future(S&& s);
 ```
 
 Eagerly launches work on the `counting_scope` but returns a `@_spawn-future-sender_@` that represents an eagerly running task.
@@ -458,16 +458,16 @@ return when_all(s.on_empty(), std::move(snd));
 ## `nest()`
 
 ```c++
-template <sender S> @*nest-sender*@<S> nest(S&& s);
+template <sender S> @@_nest-sender_@@<S> nest(S&& s);
 ```
 
-Returns a `@*nest-sender*@` that, when started, extends the lifetime of the `counting_scope` that produced it to include the lifetime of the `@*nest-sender*@` object and the lifetime of the given sender operation.
+Returns a `@_nest-sender_@` that, when started, extends the lifetime of the `counting_scope` that produced it to include the lifetime of the `@_nest-sender_@` object and the lifetime of the given sender operation.
 
 A call to `nest()` does not start the given sender.
 A call to `nest()` is not expected to incur allocations.
 
 The sender returned by a call to `nest()` holds a reference to the `counting_scope`.
-Connecting and starting the sender returned from `nest()` will connect and start the input sender and will extend the `counting_scope`'s lifetime to include the `@*nest-sender*@` and given sender operation.
+Connecting and starting the sender returned from `nest()` will connect and start the input sender and will extend the `counting_scope`'s lifetime to include the `@_nest-sender_@` and given sender operation.
 
 Similar to `spawn_future()`, `nest()` doesn't constrain the input sender to any specific shape.
 Any type of sender is accepted.
@@ -502,7 +502,7 @@ return when_all(s.on_empty(), std::move(snd)); // OK, completing snd will also c
 ## Empty detection
 
 ```c++
-template <sender S> @_on-empty-sender_@<S> when_empty(S&& s);
+template <sender S> @@_on-empty-sender_@@<S> when_empty(S&& s);
 ```
 
 A `counting_scope` object is considered to be *non-empty* when there are spawned senders that haven't completed yet, or there are senders created with `counting_scope` that are in flight.
@@ -541,7 +541,7 @@ sender auto run_in_parallel(int num_jobs, counting_scope& scope, scheduler auto&
 
 
 ```c++
-@_on-empty-sender_@ on_empty() const noexcept;
+@@_on-empty-sender_@@ on_empty() const noexcept;
 ```
 
 Equivalent to calling `when_empty(just())`
@@ -614,7 +614,7 @@ Another option is to have a type that has one implementation per library vendor.
 
 One option would be for `counting_scope` to have:
 
-- `template <sender S>@*nest-sender*@<S> nest(S&&)`
+- `template <sender S>@_nest-sender_@<S> nest(S&&)`
 
 and not
 
@@ -643,7 +643,7 @@ Another option is to define a type with `nest`, `spawn`, `spawn_future` and `whe
 
 One option would be for `counting_scope` to have:
 
-- `template <sender S>@*nest-sender*@<S> nest(S&&)`
+- `template <sender S>@_nest-sender_@<S> nest(S&&)`
 
 and add `counting_scope_token`. `counting_scope_token` would consume a `counting_scope` in its constructor. Transitioning a `counting_scope` to an `counting_scope_token` would end the nesting phase and begin the completion phase. The `counting_scope_token` would have:
 
@@ -726,7 +726,7 @@ Forwarding the cancellation of the `counting_scope` to the spawned senders would
 
 Consider `nest()` and `spawn_future()`.
 They must combine two potential stop tokens.
-One from the `counting_scope` and the other from the receiver passed to the returned `@*nest-sender*@` and `@_spawn-future-sender_@`.
+One from the `counting_scope` and the other from the receiver passed to the returned `@_nest-sender_@` and `@_spawn-future-sender_@`.
 The semantics would be that either stop token would cancel the sender and would not stop the `counting_scope`s `stop_source`.
 
 Consider the use case where a reference to a `counting_scope` is provided to many nested operations and functions to attach senders that they produce.
@@ -771,7 +771,7 @@ struct async_mutex {
     async_mutex& operator=(async_mutex&&) = delete;
 
     template <sender S>
-    @_lock-sender_@<S> lock(S&& snd);
+    @@_lock-sender_@@<S> lock(S&& snd);
 };
 ```
 
@@ -843,7 +843,7 @@ Principles that lead to avoid blocking in the destructor:
 - Blocking is like `reinterpret_cast<>` -- the name should be long and scary.
 - `join()` is grepable and explicit, it is not rare, it is not composable (There is a separate blocking wait for each. One blocking wait for many different things to complete would be better)-- this is why counting_scope has `when_empty()` instead.
 
-Every asynchronous operation must join with non-blocking primitives and only `sync_wait()` is used to block some composition of those primitives.
+Every *async-function* must join with non-blocking primitives and only `sync_wait()` is used to block some composition of those primitives.
 
 ## Why doesn't the `counting_scope` destructor stop all the nested and spawned senders?
 
@@ -872,7 +872,7 @@ One mental model for this is a semaphore. It tracks a count of lifetimes and fir
 
 Another mental model for this is block syntax. `{}` represents the root of a set of lifetimes of locals and temporaries and nested blocks.
 
-Another mental model for this is a container. This is the least accurate model. This container is a value that does not contain values. This container contains a set of active senders (an active sender is not a value, it is a state).
+Another mental model for this is a container. This is the least accurate model. This container is a value that does not contain values. This container contains a set of active senders (an active sender is not a value, it is an operation).
 
 alternatives: `sender_scope`, `sender_anchor`, `sender_nursery`
 
@@ -880,7 +880,7 @@ rejected: `dynamic_scope`, `dynamic_lifetime`, `scope`, `lifetime`
 
 ## `nest()`
 
-This provides a way to build a sender that, when started, extends the lifetime of the `counting_scope` to include the given sender. This does not allocate state, call connect or call start. This is the basis operation for `counting_scope`. `spawn()` and `spawn_future()` use `nest()` to extend the scope and then they allocate, connect and start the returned @*nest-sender*@.
+This provides a way to build a sender that, when started, extends the lifetime of the `counting_scope` to include the given sender. This does not allocate state, call connect or call start. This is the basis operation for `counting_scope`. `spawn()` and `spawn_future()` use `nest()` to extend the scope and then they allocate, connect and start the returned `@_nest-sender_@`.
 
 It would be good for the name to indicate that it is a simple operation (insert, add, embed, extend might communicate allocation, which this does not do).
 
@@ -958,17 +958,17 @@ Specification
 ```c++
 namespace std::execution {
 
-namespace { // @_exposition-only_@
-    struct @_spawn-receiver_@ { // @_exposition-only_@
-        friend void set_value(@_spawn-receiver_@) noexcept;
-        friend void set_stopped(@_spawn-receiver_@) noexcept;
+namespace { // @@_exposition-only_@@
+    struct @@_spawn-receiver_@@ { // @@_exposition-only_@@
+        friend void set_value(@@_spawn-receiver_@@) noexcept;
+        friend void set_stopped(@@_spawn-receiver_@@) noexcept;
     };
     template <typename S>
-    struct @*nest-sender*@; // @_exposition-only_@
+    struct @@_nest-sender_@@; // @@_exposition-only_@@
     template <typename S>
-    struct @_spawn-future-sender_@; // @_exposition-only_@
+    struct @@_spawn-future-sender_@@; // @@_exposition-only_@@
     template <typename S>
-    struct @_on-empty-sender_@; // @_exposition-only_@
+    struct @@_on-empty-sender_@@; // @@_exposition-only_@@
 }
 
 struct counting_scope {
@@ -979,20 +979,20 @@ struct counting_scope {
     counting_scope& operator=(const counting_scope&) = delete;
     counting_scope& operator=(counting_scope&&) = delete;
 
-    template <sender_to<@_spawn-receiver_@> S>
+    template <sender_to<@@_spawn-receiver_@@> S>
     void spawn(S&& snd);
 
     template <sender S>
-    @_spawn-future-sender_@<S> spawn_future(S&& snd);
+    @@_spawn-future-sender_@@<S> spawn_future(S&& snd);
 
     template <sender S>
-    @*nest-sender*@<S> nest(S&& snd);
+    @@_nest-sender_@@<S> nest(S&& snd);
 
     template <sender S>
     [[nodiscard]]
-    @_on-empty-sender_@<S> when_empty(S&& snd);
+    @@_on-empty-sender_@@<S> when_empty(S&& snd);
     [[nodiscard]]
-    @_on-empty-sender_@ on_empty() const noexcept;
+    @@_on-empty-sender_@@ on_empty() const noexcept;
 
     in_place_stop_source& get_stop_source() noexcept;
     in_place_stop_token get_stop_token() const noexcept;
@@ -1063,13 +1063,13 @@ struct counting_scope {
 
 ## `counting_scope::nest`
 
-1. `counting_scope::nest` is used to produce a `@*nest-sender*@` that, when started, nests the sender within the lifetime of the `counting_scope` object.
-   The given sender will be started when the `@*nest-sender*@` is started.
+1. `counting_scope::nest` is used to produce a `@_nest-sender_@` that, when started, nests the sender within the lifetime of the `counting_scope` object.
+   The given sender will be started when the `@_nest-sender_@` is started.
 
 2. The returned sender has the same completion signatures as the input sender.
 
 3. *Effects*:
-   - If `rsnd` is the returned `@*nest-sender*@`, then using it has the following effects:
+   - If `rsnd` is the returned `@_nest-sender_@`, then using it has the following effects:
      - Let `op` be the `@_operation-state_@` object returned by connecting the given sender to a receiver `recv`.
      - Let `ext_op` be the `@_operation-state_@` object returned by connecting `rsnd` to a receiver `ext_recv`.
      - Let `op` be stored in `ext_op`.
