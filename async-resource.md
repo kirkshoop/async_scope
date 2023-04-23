@@ -257,33 +257,61 @@ After all those _`async-function`_ s complete, then `run()` signals to `open()` 
 !pragma layout smetana
 title run(), open(), and close() activity
 
-(*) -->[invoke] "open(async-resource) [enter]"
--->[signal] "run(async-resource) [enter]"
+start
+fork
+  :open(async-resource) [enter];
+fork again
+  :run(async-resource) [enter];
+end fork {and}
 
-(*) -->[invoke] "run(async-resource) [enter]"
--->[invoke] "asynchronous construction"
+:asynchronous construction;
 
--->[complete] "open(async-resource) [ready]"
--->[complete] "let(open(async-resource), \n  [](async-resource-token){\n    return use-token-sender;})" 
+switch (constructed?)
+case ( ready )
+:open(async-resource) [complete];
 
--->[invoke] "spawn(async-resource-token, sender)"
+:let(open(async-resource), 
+  [](async-resource-token){
+    spawn(async-resource-token, sender);//
+    return finally(
+      use-token-sender,
+      close(async-resource-token));});
 
--->[invoke] "use-token-sender" 
+fork
+  :spawn(async-resource-token, sender);
+fork again
+  :use-token-sender;
+  :close(async-resource-token) [exit];
+end fork {and}
 
--->[invoke] "close(async-resource-token) [exit]"
+:run(async-resource) [closing];
 
--->[signal] "run(async-resource) [leave]"
+:asynchronous destruction [closing];
 
--->[invoke] "asynchronous destruction" 
-"spawn(async-resource-token, sender)" -->[join] "asynchronous destruction"
+:close(async-resource-token) [closed];
 
--->[complete] "close(async-resource-token) [closed]" 
+case ( fail )
+:open(async-resource) [stop];
 
--->[complete] "run(async-resource) [destruct]"
+'alignment
+label sp_lab0
+label sp_lab1
+label sp_lab2
+label sp_lab3
+label sp_lab4
+label sp_lab5
+label sp_lab6
+label sp_lab7
+label sp_lab8
 
--->[complete] "destructed object"
+:run(async-resource) [failing];
 
--->(*)
+:asynchronous destruction [failing];
+
+endswitch 
+
+:run(async-resource) [result];
+end
 ```
 
 ### run() -> _`sequence-sender`_
@@ -327,22 +355,43 @@ The _`run-function`_, will complete after the following steps:
 !pragma layout smetana
 title "run() -> sequence-sender activity"
 
-(*) -->[invoke] "run(async-resource) [enter]"
--->[invoke] "asynchronous construction"
--->[invoke] "use-token-sender = set_next(async-resource-token-sender)" 
+start
+:run(async-resource) [enter];
 
--->[invoke] "use-token-sender"
+:asynchronous construction;
 
--->[invoke] "spawn(async-resource-token, sender)"
--->[join] "asynchronous destruction"
+switch (constructed?)
+case ( ready )
 
-"use-token-sender" -->[completed] "run(async-resource) [leave]"
+:let(set_next(async-resource-token-sender), 
+  [](async-resource-token){
+    spawn(async-resource-token, sender);//
+    return use-token-sender;}) [enter];
 
--->[invoke] "asynchronous destruction"
+:async-resource-token-sender [complete];
 
--->[completed] "destructed object"
+fork
+  :spawn(async-resource-token, sender);
+fork again
+  :use-token-sender;
+end fork {and}
 
--->(*)
+case ( fail )
+
+'alignment
+label sp_0
+label sp_1
+label sp_2
+
+:async-resource-token-sender [stop];
+endswitch
+
+:run(async-resource) [leave];
+
+:asynchronous destruction;
+
+:run(async-resource) [result];
+end
 ```
 
 How do you use an _`async-resource`_?
