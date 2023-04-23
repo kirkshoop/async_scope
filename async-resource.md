@@ -268,14 +268,14 @@ end fork {and}
 
 switch (constructed?)
 case ( ready )
-:open(async-resource) [complete];
-
 :let(open(async-resource), 
   [](async-resource-token){
     spawn(async-resource-token, sender);//
     return finally(
       use-token-sender,
       close(async-resource-token));});
+
+:open(async-resource) [complete];
 
 fork
   :spawn(async-resource-token, sender);
@@ -291,6 +291,13 @@ end fork {and}
 :close(async-resource-token) [closed];
 
 case ( fail )
+
+'alignment
+label sp_r0
+label sp_r1
+label sp_r2
+label sp_r3
+
 :open(async-resource) [stop];
 
 'alignment
@@ -299,10 +306,6 @@ label sp_lab1
 label sp_lab2
 label sp_lab3
 label sp_lab4
-label sp_lab5
-label sp_lab6
-label sp_lab7
-label sp_lab8
 
 :run(async-resource) [failing];
 
@@ -379,9 +382,9 @@ end fork {and}
 case ( fail )
 
 'alignment
-label sp_0
-label sp_1
-label sp_2
+label sp_f0
+label sp_f1
+label sp_f2
 
 :async-resource-token-sender [stop];
 endswitch
