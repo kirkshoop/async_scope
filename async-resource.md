@@ -251,6 +251,78 @@ After all those _`async-function`_ s complete, then `run()` signals to `open()` 
 
 - `close()` completes
 
+#### Class diagram
+
+```plantuml
+!pragma layout smetana
+title async-resource classes
+
+class close_resource_impl<? satisfies operation> {
+  + void start()
+  - <<operation>>resource_impl* impl
+  - <<receiver>>r
+}
+
+class close_resource<? satisfies sender> {
+  + completion_signatures< > \nget_completion_signatures(environment)
+  + <<operation>>close_resource_impl connect(<<receiver>>r)
+}
+close_resource::connect -d-> close_resource_impl 
+
+class resource_token {
+  + <<sender>>close_resource close()
+  - <<operation>>resource_impl* impl
+}
+resource_token::close -l-> close_resource
+
+class resource_item_impl<? satisfies operation> {
+  + void start()
+  - <<operation>>resource_impl* impl
+  - <<receiver>>r
+}
+
+class resource_item<? satisfies sender> {
+  + completion_signatures<set_value_t(resource_token)> \nget_completion_signatures(environment)
+  + <<operation>>resource_item_impl connect(<<receiver>>r)
+}
+resource_item::connect -u-> resource_item_impl 
+
+class open_resource_impl<? satisfies operation> {
+  + void start()
+  - <<operation>>resource_impl* impl
+  - <<receiver>>r
+}
+
+class open_resource<? satisfies sender> {
+  + completion_signatures< > \nget_completion_signatures(environment)
+  + <<operation>>open_resource_impl connect(<<receiver>>r)
+}
+open_resource::connect -u-> open_resource_impl 
+
+class resource_impl<? satisfies operation> {
+  + void start()
+  - <<sequence-receiver>>r
+}
+resource_token::impl -d-* resource_impl
+resource_item_impl::impl -u-* resource_impl
+open_resource_impl::impl -l-* resource_impl
+close_resource_impl::impl -r-* resource_impl
+
+class resource<? satisfies sequence-sender> {
+  + completion_signatures<set_value_t(resource_token)> \nget_completion_signatures(environment)
+  + <<operation>>resource_impl \nsequence_connect(<<sequence-receiver>>r)
+}
+resource::sequence_connect -u-> resource_impl 
+
+class async_resource {
+  + <<sender>>open_resource open()
+  + <<sender>>resource run()
+}
+async_resource::run -u-> resource 
+async_resource::open -u-> open_resource
+
+```
+
 #### Activity diagram 
 
 ```plantuml
@@ -351,6 +423,48 @@ The _`run-function`_, will complete after the following steps:
   **at this point, the _`async-resource`_ lifetime ends**
 
 - any _`async-function`_ needed to close the _`async-resource`_ have completed
+
+#### Class diagram
+
+```plantuml
+!pragma layout smetana
+title async-resource classes
+
+class resource_token {
+  - <<operation>>resource_impl* impl
+}
+
+class resource_item_impl<? satisfies operation> {
+  + void start()
+  - <<operation>>resource_impl* impl
+  - <<receiver>>r
+}
+
+class resource_item<? satisfies sender> {
+  + completion_signatures<set_value_t(resource_token)> \nget_completion_signatures(environment)
+  + <<operation>>resource_item_impl connect(<<receiver>>r)
+}
+resource_item::connect -u-> resource_item_impl 
+
+class resource_impl<? satisfies operation> {
+  + void start()
+  - <<sequence-receiver>>r
+}
+resource_token::impl -d-* resource_impl
+resource_item_impl::impl -u-* resource_impl
+
+class resource<? satisfies sequence-sender> {
+  + completion_signatures<set_value_t(resource_token)> \nget_completion_signatures(environment)
+  + <<operation>>resource_impl \nsequence_connect(<<sequence-receiver>>r)
+}
+resource::sequence_connect -u-> resource_impl 
+
+class async_resource {
+  + <<sequence-sender>>resource run()
+}
+async_resource::run -u-> resource 
+
+```
 
 #### Activity diagram 
 

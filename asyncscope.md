@@ -1,5 +1,5 @@
 ---
-title: "`counting_scope` -- Creating scopes for non-sequential concurrency"
+title: "`async_scope` -- Creating scopes for non-sequential concurrency"
 subtitle: "Draft Proposal"
 document: D2519R0
 date: today
@@ -26,7 +26,7 @@ Changes
 Introduction
 ============
 
-A major precept of [@P2300R6] is structured concurrency. The `start_detached` and `ensure_started` algorithms are motivated by some important scenarios. Not every _`async-function`_ has a clear chain of work to consume or block on the result. The problem with these algorithms is that they provide unstructured concurrency. This is an unnecessary and unwelcome and undesirable property for concurrency. Using these algorithms leads to problems with lifetimes that are often 'fixed' using `shared_ptr` for ad-hoc garbage collection. 
+A major precept of [@P2300R7] is structured concurrency. The `start_detached` and `ensure_started` algorithms are motivated by some important scenarios. Not every _`async-function`_ has a clear chain of work to consume or block on the result. The problem with these algorithms is that they provide unstructured concurrency. This is an unnecessary and unwelcome and undesirable property for concurrency. Using these algorithms leads to problems with lifetimes that are often 'fixed' using `shared_ptr` for ad-hoc garbage collection. 
 
 This paper describes the `counting_scope` _`async-object`_. A `counting_scope` would be used to spawn many _`async-function`_ s safely inside an enclosing _`async-function`_. 
 
@@ -77,8 +77,8 @@ int main() {
 In this example we are creating parallel work based on the given input vector.
 All the work will be spawned on the local `static_thread_pool` object, and will use a shared `work_context` object.
 
-Because the number of work items is dynamic, one is forced to use `start_detached()` from [@P2300R6] (or something equivalent) to dynamically spawn work.
-[@P2300R6] doesn't provide any facilities to spawn dynamic work and return a sender (i.e., something like `when_all` but with a dynamic number of input senders).
+Because the number of work items is dynamic, one is forced to use `start_detached()` from [@P2300R7] (or something equivalent) to dynamically spawn work.
+[@P2300R7] doesn't provide any facilities to spawn dynamic work and return a sender (i.e., something like `when_all` but with a dynamic number of input senders).
 
 Using `start_detached()` here follows the _fire-and-forget_ style, meaning that we have no control over, or awareness of, the termination of the _`async-function`_ being spawned.
 
@@ -88,7 +88,7 @@ If there are still _`async-function`_ s that are not yet complete, this might le
 
 _NOTE:_ As described in [@P2849R0], the `work_context` and `static_thread_pool` objects need to be _`async-object`_ s because they are used by _`async-function`_ s.
 
-[@P2300R6] doesn't give us out-of-the-box facilities to use in solving these types of problems.
+[@P2300R7] doesn't give us out-of-the-box facilities to use in solving these types of problems.
 
 This paper proposes the `counting_scope` facility that would help us avoid the invalid behavior.
 With `counting_scope`, one might write safe code this way:
@@ -119,7 +119,7 @@ Please see below for more examples.
 
 Structured Programming [@Dahl72] transformed the software world by making it easier to reason about the code, and build large software from simpler constructs.
 We want to achieve the same effect on concurrent programming by ensuring that we _structure_ our concurrent code.
-[@P2300R6] makes a big step in that direction, but, by itself, it doesn't fully realize the principles of Structured Programming.
+[@P2300R7] makes a big step in that direction, but, by itself, it doesn't fully realize the principles of Structured Programming.
 More specifically, it doesn't always ensure that we can apply the _single entry, single exit point_ principle.
 
 The `start_detached` sender algorithm fails this principle by behaving like a `GOTO` instruction.
@@ -132,9 +132,9 @@ This is the goal of `counting_scope`.
 
 ## `counting_scope` may increase consensus for P2300 
 
-Although [@P2300R6] is generally considered a strong improvement on concurrency in C++, various people voted against introducing this into the C++ standard.
+Although [@P2300R7] is generally considered a strong improvement on concurrency in C++, various people voted against introducing this into the C++ standard.
 
-This paper is intended to increase consensus for [@P2300R6].
+This paper is intended to increase consensus for [@P2300R7].
 
 Examples of use
 ===============
@@ -336,7 +336,7 @@ Eagerly launches work on the `counting_scope`.
 
 This involves a dynamic allocation of the spawned sender's _`operation-state`_. The _`operation-state`_ is destroyed after the spawned sender completes.
 
-This is similar to `start_detached()` from [@P2300R6], but the `counted_scope` keeps track of the spawned _`async-function`_ s.
+This is similar to `start_detached()` from [@P2300R7], but the `counted_scope` keeps track of the spawned _`async-function`_ s.
 
 The given sender must complete with `void` or `stopped`.
 The given sender is not allowed to complete with an error; the user must explicitly handle the errors that might appear as part of the _`sender-expression`_ passed to `spawn()`.
@@ -369,7 +369,7 @@ Eagerly launches work on the `counting_scope` and returns a _`spawn-future-sende
 
 This involves a dynamic allocation of the _`spawn-future-sender`_ state, which includes the given sender `s` 's _`operation-state`_, and synchronization to resolve the race between the production of the given sender `s` 's result and the consumption of the given sender `s` 's result. The _`spawn-future-sender`_ state is destroyed after the given sender `s` completes and all copies of the  _`spawn-future-sender`_ have been destructed.
 
-This is similar to `ensure_started()` from [@P2300R6], but the `counted_scope` keeps track of the spawned _`async-function`_ s.
+This is similar to `ensure_started()` from [@P2300R7], but the `counted_scope` keeps track of the spawned _`async-function`_ s.
 
 Unlike `spawn()`, the sender given to `spawn_future()` is not constrained on a given shape.
 It may send different types of values, and it can complete with errors.
@@ -492,12 +492,12 @@ For example, the continuation can handle different types of values and errors.
 
 ## P2300's `start_detached()`
 
-The `spawn()` method in this paper can be used as a replacement for `start_detached` proposed in [@P2300R6].
+The `spawn()` method in this paper can be used as a replacement for `start_detached` proposed in [@P2300R7].
 Essentially it does the same thing, but it can also attach the spawned sender to the enclosing _`async-function`_.
 
 ## P2300's `ensure_started()`
 
-The `spawn_future()` method in this paper can be used as a replacement for `ensure_started` proposed in [@P2300R6].
+The `spawn_future()` method in this paper can be used as a replacement for `ensure_started` proposed in [@P2300R7].
 Essentially it does the same thing, but it can also attach the spawned sender to the enclosing _`async-function`_.
 
 ## Supporting the pipe operator
@@ -510,8 +510,8 @@ std::move(snd1) | spawn(s); // returns void
 sender auto snd3 = std::move(snd2) | spawn_future(s) | then(...);
 ```
 
-In [@P2300R6] sender consumers do not have support for the pipe operator.
-As `spawn()` works similarly to `start_detached()` from [@P2300R6], which is a sender consumer, if we follow the same rationale, it makes sense not to support the pipe operator for `spawn()`.
+In [@P2300R7] sender consumers do not have support for the pipe operator.
+As `spawn()` works similarly to `start_detached()` from [@P2300R7], which is a sender consumer, if we follow the same rationale, it makes sense not to support the pipe operator for `spawn()`.
 
 On the other hand, `spawn_future()` is not a sender consumer, thus we might have considered adding pipe operator to it.
 To keep consistency with `spawn()`, at this point the paper doesn't support pipe operator for `spawn_future()`.
@@ -582,6 +582,166 @@ This provides a way to start work and later ask for the result. This will alloca
 It would be good for the name to be ugly, to indicate that it is a more expensive operation than `spawn()`.
 
 alternatives: `spawn_with_result()`
+
+Diagrams
+========
+
+```plantuml
+!pragma layout smetana
+title counting_scope classes
+
+class counting_nest_impl<? satisfies operation> {
+  + void start()
+  - <<operation>>counting_impl* impl
+  - <<receiver>>r
+}
+
+class counting_spawn_future_impl<? satisfies operation> {
+  + void start()
+  - <<operation>>counting_impl* impl
+  - <<receiver>>r
+}
+
+class counting_nest<? satisfies sender> {
+  + completion_signatures_of_t< <<sender>>s > \nget_completion_signatures(environment)
+  + <<operation>>counting_nest_impl connect(<<receiver>>r)
+}
+counting_nest::connect -d-> counting_nest_impl 
+
+class counting_spawn_future<? satisfies sender> {
+  + completion_signatures_of_t< <<sender>>s > \nget_completion_signatures(environment)
+  + <<operation>>counting_spawn_future_impl connect(<<receiver>>r)
+}
+counting_spawn_future::connect -d-> counting_spawn_future_impl 
+
+class counting_scope<? satisfies async-scope> {
+  + <<sender>>counting_nest nest(<<sender>>s)
+  + void spawn(<<sender>>s)
+  + <<sender>>counting_spawn_future spawn_future(<<sender>>s)
+  - <<operation>>counting_impl* impl
+}
+counting_scope::nest -l-> counting_nest 
+counting_scope::spawn_future -r-> counting_spawn_future 
+
+class counting_item_impl<? satisfies operation> {
+  + void start()
+  - <<operation>>counting_impl* impl
+  - <<receiver>>r
+}
+
+class counting_item<? satisfies sender> {
+  + completion_signatures<set_value_t(counting_scope)> \nget_completion_signatures(environment)
+  + <<operation>>counting_item_impl connect(<<receiver>>r)
+}
+counting_item::connect -u-> counting_item_impl 
+
+class counting_impl<? satisfies operation> {
+  + void start()
+  - <<sequence-receiver>>r
+  - int count
+}
+counting_scope::impl -d-* counting_impl
+counting_item_impl::impl -u-* counting_impl
+counting_nest_impl::impl -r-* counting_impl
+counting_spawn_future_impl::impl -l-* counting_impl
+
+class counting<? satisfies sequence-sender> {
+  + completion_signatures<set_value_t(counting_scope)> \nget_completion_signatures(environment)
+  + <<operation>>counting_impl sequence_connect(<<sequence-receiver>>r)
+}
+counting::sequence_connect -u-> counting_impl 
+
+class counting_scope_resource<? satisfies async-resource> {
+  + <<sequence-sender>>counting run()
+}
+counting_scope_resource::run -u-> counting 
+
+```
+
+```plantuml
+!pragma layout smetana
+title counting_scope nest() activity
+
+start
+:async-invoke nest(scope, func);
+
+:nest(scope, func) [enter];
+
+:scope ++count;
+
+:async-invoke func;
+
+:func [enter];
+
+:func [result];
+
+:nest(scope, func) [result];
+
+:scope --count;
+
+if (count) equals (0) then 
+if (scope) is (unused) then 
+:destruct scope;
+else
+->scope is in use;
+endif
+else
+->count > 0;
+endif
+end
+```
+
+```plantuml
+!pragma layout smetana
+title counting_scope spawn() activity
+
+start
+:invoke spawn(scope, func);
+
+:spawn(scope, func) [enter];
+
+:allocate state for \n  connect(\n    nest(scope, func), spawn-receiver) ;
+
+:async-invoke nest(scope, func);
+
+:spawn(scope, func) [return void];
+
+:nest(scope, func) [enter];
+
+:nest(scope, func) [result];
+
+end
+```
+
+```plantuml
+!pragma layout smetana
+title counting_scope spawn_future() activity
+
+start
+:invoke spawn-future = spawn_future(scope, func);
+
+:spawn_future(scope, func) [enter];
+
+:allocate state for \n  connect(\n    nest(scope, func), \n    spawn-future-receiver) ;
+
+:async-invoke nest(scope, func);
+
+:spawn_future(scope, func) [return spawn-future];
+
+:nest(scope, func) [enter];
+
+:nest(scope, func) [result];
+
+:stored-result = result;
+
+:async-invoke spawn-future;
+
+:spawn-future [enter];
+
+:spawn-future [stored-result];
+
+end
+```
 
 Specification
 =============
