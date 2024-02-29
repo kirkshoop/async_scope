@@ -24,6 +24,10 @@ toc: true
 Changes
 =======
 
+## R1
+
+- Add implementation experience
+
 ## R0
 
 - first revision
@@ -68,12 +72,86 @@ The general concept of an async scope to manage work has been deployed broadly a
 coroutine library, [@follycoro], uses [@follyasyncscope] to safely launch awaitables. Most code written with Unifex, an
 implementation of an earlier version of the _Sender/Receiver_ model proposed in [@P2300R7], uses [@asyncscopeunifexv1],
 although experience with the v1 design led to the creation of [@asyncscopeunifexv2], which has a smaller interface and
-only one responsibility.
+a cleaner definition of responsibility.
 
-TODO: we have some implementation experience to share regarding our efforts to progressively add structure to an
-existing library at Meta that needs legal review before it can be made public and the review won't be complete before
-the mailing deadline. We'll include the experience in another revision, which we expect to be ready before the Tokyo
-meeting.
+As an early adopter of Unifex, rsys (Meta’s cross-platform voip client library) became the entry point for structured concurrency in mobile code at Meta. We originally built rsys with an unstructured asynchrony model built around posting callbacks to threads in order to optimize for binary size. However, this came at the expense of developer velocity due to the increasing cost of debugging deadlocks and crashes resulting from race conditions.
+
+We decided to adopt Unifex and refactor towards a more structured architecture to address these problems systematically. Converting an unstructured production codebase to a structured one is such a large project that it needs to be done in phases. As we began to convert callbacks to sender/tasks, we quickly realized that we needed a safe place to start structured asynchronous work in an unstructured environment. We addressed this need with  unifex::v1::async_scope paired with an executor to address a recurring pattern:
+
+:::cmptable
+### Before
+```cpp
+// Abstraction for thread that has the ability to execute units of work.
+class Executor {
+ public:
+  virtual void add(Func function)    noexcept = 0;
+};
+
+// Example class
+class Foo {
+  std::shared_ptr<Executor> exec_;
+
+ public:
+  void doSomething() {
+     auto asyncWork = [&]() {
+       // do something
+     };
+     exec_->add(asyncWork);
+  }
+};
+```
+
+### After
+```cpp
+// Utility class for executing async work on an async_scope and on the provided executor
+class ExecutorAsyncScopePair {
+  unifex::v1::async_scope scope_;
+  ExecutorScheduler exec_
+
+ public:
+  void add(Func func) {
+    scope_.detached_spawn_call_on(
+      exec_, func);
+  }
+
+  auto cleanup() {
+    return scope_.cleanup();
+  }
+};
+
+// Example class
+class Foo {
+ std::shared_ptr<ExecutorAsyncScopePair> exec_;
+ 
+ public:
+  ~Foo() {
+    sync_wait(exec_->cleanup());
+  }
+
+  void doSomething() {
+    auto asyncWork = [&]() {
+      // do something
+    };
+
+
+   exec_->add(asyncWork);
+  }
+};
+```
+::::
+
+This broadly worked but we discovered that the above design coupled with the v1 API allowed for too many redundancies and conflated too many responsibilities (scoping async work, associating work with a stop source, and transferring scoped work to a new scheduler).
+
+We learned that making each component own a distinct responsibility will minimize the confusion and increase the structured concurrency adoption rate. The above example was an intuitive use of async_scope because the concept of a “scoped executor” was familiar to many engineers and is a popular async pattern in other programming languages. However, the above design abstracted away some of the APIs in async_scope that explicitly asked for a scheduler, which would have helped challenge the assumption engineers made about async_scope being an instance of a “scoped executor”.
+
+Cancellation was an unfamiliar topic for engineers within the context of asynchronous programming. The v1::async_scope provided both cleanup() and complete() to give engineers the freedom to decide between canceling work or waiting for work to finish. The different nuances on when this should happen and how it happens ended up being an obstacle that engineers didn’t want to deal with.
+
+Over time, we also found redundancies in the way v1::async_scope and other algorithms were implemented and identified other use cases that could benefit from a different kind of async scope. This motivated us to create v2::async_scope which only has one responsibility (scope), and nest which helped us improve maintainability and flexibility of unifex. 
+
+The unstructured nature of cleanup()/complete() in a partially structured codebase introduced deadlocks when engineers nested the cleanup()/complete() sender in the scope being joined. This risk of deadlock remains with v2::async_scope::join() however, we do think this risk can be managed and is worth the tradeoff in exchange for a more coherent architecture that has fewer crashes. For example, we have experienced a significant reduction in these types of deadlocks once engineers understood that join() is a destructor-like operation that needs to be run only by the scope’s owner. Since there is no language support to manage async lifetimes automatically, this insight was key in preventing these types of deadlocks. Although this breakthrough was a result of strong guidance from experts, we believe that the simpler design of v2::async_scope would make this a little easier.
+
+We strongly believe that async_scope was necessary for making structured concurrency possible within rsys, and we believe that the improvements we made with v2::async_scope will make the adoption of P2300 more accessible.
+
 
 Motivation
 ==========
@@ -248,7 +326,7 @@ int main() {
 
     ex::scheduler auto sch = ctx.scheduler();
 
-    ex::sender auto val = ex::on(sch, ex::just() | ex::then([&result, sch, &scope]() {
+    ex::sender auto val = ex::on(sch, ex::just() | ex::then([&result, sch, scope]() {
         int val = 13;
 
         auto print_sender = ex::just() | ex::then([val] {
@@ -331,7 +409,7 @@ ex::sender auto foo(ex::scheduler auto sch) {
                    [sch](ex::counting_scope& scope) {
                        return ex::schedule(sch) | ex::then([] {
                            std::cout << "Before tasks launch\n";
-                       }) | ex::then([sch, &scope] {
+                       }) | ex::then([sch, scope] {
                            // Create parallel work
                            for (int i = 0; i < 100; ++i)
                                ex::spawn(scope, ex::on(sch, some_work(i)));
@@ -586,7 +664,7 @@ Usage example:
 ```cpp
 ...
 for (int i = 0; i < 100; i++)
-    spawn(on(sched, some_work(i)), scope);
+    spawn(s, on(sched, some_work(i)));
 ```
 
 
@@ -822,7 +900,7 @@ Usage example:
 ...
 sender auto snd = s.nest(key_work());
 for (int i = 0; i < 10; i++)
-    spawn(on(sched, other_work(i)), scope);
+    spawn(s, on(sched, other_work(i)));
 return on(sched, std::move(snd));
 ```
 
