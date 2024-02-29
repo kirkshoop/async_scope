@@ -248,7 +248,7 @@ int main() {
 
     ex::scheduler auto sch = ctx.scheduler();
 
-    ex::sender auto val = ex::on(sch, ex::just() | ex::then([&result, sch, scope]() {
+    ex::sender auto val = ex::on(sch, ex::just() | ex::then([&result, sch, &scope]() {
         int val = 13;
 
         auto print_sender = ex::just() | ex::then([val] {
@@ -331,7 +331,7 @@ ex::sender auto foo(ex::scheduler auto sch) {
                    [sch](ex::counting_scope& scope) {
                        return ex::schedule(sch) | ex::then([] {
                            std::cout << "Before tasks launch\n";
-                       }) | ex::then([sch, scope] {
+                       }) | ex::then([sch, &scope] {
                            // Create parallel work
                            for (int i = 0; i < 100; ++i)
                                ex::spawn(scope, ex::on(sch, some_work(i)));
@@ -586,7 +586,7 @@ Usage example:
 ```cpp
 ...
 for (int i = 0; i < 100; i++)
-    spawn(s, on(sched, some_work(i)));
+    spawn(on(sched, some_work(i)), scope);
 ```
 
 
@@ -822,7 +822,7 @@ Usage example:
 ...
 sender auto snd = s.nest(key_work());
 for (int i = 0; i < 10; i++)
-    spawn(s, on(sched, other_work(i)));
+    spawn(on(sched, other_work(i)), scope);
 return on(sched, std::move(snd));
 ```
 
