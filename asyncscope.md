@@ -1,6 +1,6 @@
 ---
 title: "`async_scope` -- Creating scopes for non-sequential concurrency"
-document: P3149R0
+document: P3149R1
 date: today
 audience:
   - "SG1 Parallelism and Concurrency"
@@ -24,9 +24,14 @@ toc: true
 Changes
 =======
 
+## R1
+
+- Add implementation experience
+- Incorporate pre-meeting feedback from Eric Niebler
+
 ## R0
 
-- first revision
+- First revision
 
 Introduction
 ============
@@ -40,7 +45,7 @@ under- or unaddressed:
 
 This paper describes the utilities needed to address the above scenarios within the following constraints:
 
-- _No detached work by default;_ as specified in P2300R7, the `start_detached` and `ensure_started` algorithms invite
+- _No detached work by default;_ as specified in [@P2300R7], the `start_detached` and `ensure_started` algorithms invite
   users to start concurrent work with no built-in way to know when that work has finished.
   - Such so-called "detached work" is undesirable; without a way to know when detached work is done, it is difficult
     know when it is safe to destroy any resources referred to by the work. Ad hoc solutions to this shutdown problem
@@ -68,12 +73,115 @@ The general concept of an async scope to manage work has been deployed broadly a
 coroutine library, [@follycoro], uses [@follyasyncscope] to safely launch awaitables. Most code written with Unifex, an
 implementation of an earlier version of the _Sender/Receiver_ model proposed in [@P2300R7], uses [@asyncscopeunifexv1],
 although experience with the v1 design led to the creation of [@asyncscopeunifexv2], which has a smaller interface and
-only one responsibility.
+a cleaner definition of responsibility.
 
-TODO: we have some implementation experience to share regarding our efforts to progressively add structure to an
-existing library at Meta that needs legal review before it can be made public and the review won't be complete before
-the mailing deadline. We'll include the experience in another revision, which we expect to be ready before the Tokyo
-meeting.
+As an early adopter of Unifex, [@rsys] (Meta’s cross-platform voip client library) became the entry point for structured
+concurrency in mobile code at Meta. We originally built rsys with an unstructured asynchrony model built around posting
+callbacks to threads in order to optimize for binary size. However, this came at the expense of developer velocity due
+to the increasing cost of debugging deadlocks and crashes resulting from race conditions.
+
+We decided to adopt Unifex and refactor towards a more structured architecture to address these problems
+systematically. Converting an unstructured production codebase to a structured one is such a large project that it
+needs to be done in phases. As we began to convert callbacks to senders/tasks, we quickly realized that we needed a safe
+place to start structured asynchronous work in an unstructured environment. We addressed this need with
+`unifex::v1::async_scope` paired with an executor to address a recurring pattern:
+
+:::cmptable
+### Before
+```cpp
+// Abstraction for thread that has the ability
+// to execute units of work.
+class Executor {
+ public:
+  virtual void add(Func function) noexcept = 0;
+};
+
+// Example class
+class Foo {
+  std::shared_ptr<Executor> exec_;
+
+ public:
+  void doSomething() {
+     auto asyncWork = [&]() {
+       // do something
+     };
+     exec_->add(asyncWork);
+  }
+};
+```
+
+### After
+```cpp
+// Utility class for executing async work on an
+// async_scope and on the provided executor
+class ExecutorAsyncScopePair {
+  unifex::v1::async_scope scope_;
+  ExecutorScheduler exec_
+
+ public:
+  void add(Func func) {
+    scope_.detached_spawn_call_on(
+      exec_, func);
+  }
+
+  auto cleanup() {
+    return scope_.cleanup();
+  }
+};
+
+// Example class
+class Foo {
+ std::shared_ptr<ExecutorAsyncScopePair> exec_;
+
+ public:
+  ~Foo() {
+    sync_wait(exec_->cleanup());
+  }
+
+  void doSomething() {
+    auto asyncWork = [&]() {
+      // do something
+    };
+
+
+   exec_->add(asyncWork);
+  }
+};
+```
+::::
+
+This broadly worked but we discovered that the above design coupled with the v1 API allowed for too many redundancies
+and conflated too many responsibilities (scoping async work, associating work with a stop source, and transferring
+scoped work to a new scheduler).
+
+We learned that making each component own a distinct responsibility will minimize the confusion and increase the
+structured concurrency adoption rate. The above example was an intuitive use of async_scope because the concept of a
+“scoped executor” was familiar to many engineers and is a popular async pattern in other programming languages.
+However, the above design abstracted away some of the APIs in async_scope that explicitly asked for a scheduler, which
+would have helped challenge the assumption engineers made about async_scope being an instance of a “scoped executor”.
+
+Cancellation was an unfamiliar topic for engineers within the context of asynchronous programming. The
+`v1::async_scope` provided both `cleanup()` and `complete()` to give engineers the freedom to decide between canceling
+work or waiting for work to finish. The different nuances on when this should happen and how it happens ended up being
+an obstacle that engineers didn’t want to deal with.
+
+Over time, we also found redundancies in the way `v1::async_scope` and other algorithms were implemented and identified
+other use cases that could benefit from a different kind of async scope. This motivated us to create `v2::async_scope`
+which only has one responsibility (scope), and `nest` which helped us improve maintainability and flexibility of
+Unifex.
+
+The unstructured nature of `cleanup()`/`complete()` in a partially structured codebase introduced deadlocks when
+engineers nested the `cleanup()`/`complete()` sender in the scope being joined. This risk of deadlock remains with
+`v2::async_scope::join()` however, we do think this risk can be managed and is worth the tradeoff in exchange for a
+more coherent architecture that has fewer crashes. For example, we have experienced a significant reduction in these
+types of deadlocks once engineers understood that `join()` is a destructor-like operation that needs to be run only by
+the scope’s owner. Since there is no language support to manage async lifetimes automatically, this insight was key in
+preventing these types of deadlocks. Although this breakthrough was a result of strong guidance from experts, we
+believe that the simpler design of `v2::async_scope` would make this a little easier.
+
+We strongly believe that async_scope was necessary for making structured concurrency possible within rsys, and we
+believe that the improvements we made with `v2::async_scope` will make the adoption of P2300 more accessible.
+
 
 Motivation
 ==========
@@ -224,13 +332,6 @@ will prevent local reasoning, which will make the program harder to understand.
 To properly structure our concurrency, we need an abstraction that ensures that all async work that is spawned has a
 defined, observable, and controllable lifetime. This is the goal of `counting_scope`.
 
-## `counting_scope` may increase consensus for P2300
-
-Although [@P2300R7] is generally considered a strong improvement on concurrency in C++, various people voted against
-introducing this into the C++ standard.
-
-This paper is intended to increase consensus for [@P2300R7].
-
 Examples of use
 ===============
 
@@ -248,7 +349,7 @@ int main() {
 
     ex::scheduler auto sch = ctx.scheduler();
 
-    ex::sender auto val = ex::on(sch, ex::just() | ex::then([&result, sch, scope]() {
+    ex::sender auto val = ex::on(sch, ex::just() | ex::then([&result, sch, &scope]() {
         int val = 13;
 
         auto print_sender = ex::just() | ex::then([val] {
@@ -331,7 +432,7 @@ ex::sender auto foo(ex::scheduler auto sch) {
                    [sch](ex::counting_scope& scope) {
                        return ex::schedule(sch) | ex::then([] {
                            std::cout << "Before tasks launch\n";
-                       }) | ex::then([sch, scope] {
+                       }) | ex::then([sch, &scope] {
                            // Create parallel work
                            for (int i = 0; i < 100; ++i)
                                ex::spawn(scope, ex::on(sch, some_work(i)));
@@ -558,15 +659,19 @@ void spawn(Sender&& snd, Scope&& scope, Env env = {});
 Invokes `nest(std::forward<Sender>(snd), std::forward<Scope>(scope))` to associate the given sender with the given scope
 and then eagerly starts the resulting sender.
 
-Starting the nested sender involves a dynamic allocation of the sender's _`operation-state`_. If the given environment,
-`env`, provides an _Allocator_ by responding to `get_allocator(env)` then the resulting _Allocator_ is used to allocate
-the _`operation-state`_; otherwise, the allocation is done with a `std::allocator<>`. The _`operation-state`_ is
-constructed by connecting the nested sender to a _`spawn-receiver`_. The _`operation-state`_ is destroyed and
-deallocated after the spawned sender completes.
+Starting the nested sender involves a dynamic allocation of the sender's _`operation-state`_. The following algorithm
+determines which _Allocator_ to use for this allocation:
+
+ - If `get_allocator(env)` is valid and returns an _Allocator_ then choose that _Allocator_.
+ - Otherwise, if `get_allocator(get_env(snd))` is valid and returns an _Allocator_ then choose that _Allocator_.
+ - Otherwise, choose `std::allocator<>`.
+
+The _`operation-state`_ is constructed by connecting the nested sender to a _`spawn-receiver`_. The _`operation-state`_
+is destroyed and deallocated after the spawned sender completes.
 
 A _`spawn-receiver`_, `sr`, responds to `get_env(sr)` with an instance of a `@@_spawn-env_@@<Env>`, `senv`. The result
 of `get_allocator(senv)` is a copy of the _Allocator_ used to allocate the _`operation-state`_. For all other queries,
-`Q`, the result of `Q(fenv)` is `Q(env)`.
+`Q`, the result of `Q(senv)` is `Q(env)`.
 
 This is similar to `start_detached()` from [@P2300R7], but the scope may observe and participate in the lifecycle of the
 work described by the sender. The `counting_scope` described in this paper uses this opportunity to keep a count of
@@ -586,7 +691,7 @@ Usage example:
 ```cpp
 ...
 for (int i = 0; i < 100; i++)
-    spawn(s, on(sched, some_work(i)));
+    spawn(on(sched, some_work(i)), scope);
 ```
 
 
@@ -617,7 +722,8 @@ sender.
 
 Similar to `spawn()`, starting the nested sender involves a dynamic allocation of some state. `spawn_future()` chooses
 an _Allocator_ for this allocation in the same way `spawn()` does: use the result of `get_allocator(env)` if that is a
-valid expression, otherwise use a `std::allocator<>`.
+valid expression, otherwise use the result of `get_allocator(get_env(snd))` if that is a valid expression, otherwise use
+a `std::allocator<>`.
 
 Unlike `spawn()`, the dynamically allocated state contains more than just an _`operation-state`_ for the nested sender;
 the state must also contain storage for the result of the nested sender, however it eventually completes, and
@@ -742,8 +848,23 @@ there are no attempts to use `res` after its lifetime ends:
 Under the standard assumption that the arguments to `nest()` are and remain valid while evaluating `nest()`, it is
 always safe to invoke any supported operation on the returned _`nest-sender`_. Furthermore, if all senders returned from
 `nest()` are eventually started or discarded then the `join()` operation always eventually finishes because the number
-of outstanding senders nested within the corresponding scope is monotonically decreasing. Conversely, "leaking" a
-_`nest-sender`_ will cause the `join()` operation to deadlock.
+of outstanding senders nested within the corresponding scope is monotonically decreasing. Conversely, the `join()`
+operation will never terminate if there are any associated _`nest-senders`_ that never become "done with the scope"
+(i.e. that remain either unconnected or unstarted until after the `join()` is expected to complete). For example:
+
+```cpp
+void deadlock() {
+    namespace ex = std::execution;
+
+    ex::counting_scope scope;
+
+    ex::sender auto s = ex::nest(ex::just(), scope);
+
+    // never completes because s's continued existence keeps the scope open
+    std::this_thread::sync_wait(scope.join());
+}
+```
+
 
 The risk of deadlock is explicitly preferred in this design over the risk of use-after-free errors because
 `counting_scope` is an async scope that is biased towards being used to progressively add structure to
@@ -754,7 +875,8 @@ particular object's lifetime. So, although it is generally easier to diagnose us
 diagnose deadlocks, we've found that it's easier to *avoid* deadlocks with this design than it is to avoid
 use-after-free errors with other designs.
 
-A `counting_scope` is uncopyable and immovable so its copy and move operators are explicitly deleted.
+A `counting_scope` is uncopyable and immovable so its copy and move operators are explicitly deleted. `counting_scope`
+could be made movable but it would cost an allocation so this is not proposed.
 
 ### `counting_scope::counting_scope()`
 
@@ -822,7 +944,7 @@ Usage example:
 ...
 sender auto snd = s.nest(key_work());
 for (int i = 0; i < 10; i++)
-    spawn(s, on(sched, other_work(i)));
+    spawn(on(sched, other_work(i)), scope);
 return on(sched, std::move(snd));
 ```
 
@@ -840,7 +962,9 @@ completes with `set_value()` when the scope moves from the closed/joining state 
 the scope's count of outstanding senders drops to zero. `o` may complete synchronously if it happens to observe that the
 count of outstanding senders is already zero when started; otherwise, `o` completes on the execution context it was
 started on by asking its receiver, `r`, for a scheduler, `sch`, with `get_scheduler(get_env(r))` and then starting the
-sender returned from `schedule(sch)`.
+sender returned from `schedule(sch)`. This requirement to complete on the receiver's scheduler restricts which receivers
+a _`join-sender`_ may be connected to in exchange for determinism; the alternative would have the _`join-sender`_
+completing on the execution context of whichever nested operation happens to be the last one to complete.
 
 ### `counting_scope::joined()`
 
@@ -1168,5 +1292,11 @@ references:
     title: "async_scope"
     url: https://github.com/NVIDIA/stdexec/blob/main/include/exec/async_scope.hpp
     company: NVIDIA Corporation
+  - id: rsys
+    citation-label: rsys
+    type: webpage
+    title: "A smaller, faster video calling library for our apps"
+    url: https://engineering.fb.com/2020/12/21/video-engineering/rsys/
+    company: Meta Platforms, Inc
 
 ---
