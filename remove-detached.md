@@ -25,33 +25,42 @@ Remove `ensure_started` and `start_detached` from [@P2300R7] by removing the fol
 
 ::: rm
 
-4.21.13. `execution::ensure_started`
-
-```cpp
-execution::sender auto ensure_started(
-    execution::sender auto sender
-);
-```
-
-Once ensure_started returns, it is known that the provided sender has been connected and `start` has been called on the resulting operation state (see § 5.2 Operation states represent work); in other words, the work described by the provided sender has been submitted for execution on the appropriate execution resources. Returns a sender which completes when the provided sender completes and sends values equivalent to those of the provided sender.
-
-If the returned sender is destroyed before `execution::connect()` is called, or if `execution::connect()` is called but the returned operation-state is destroyed before `execution::start()` is called, then a stop-request is sent to the eagerly launched operation and the operation is detached and will run to completion in the background. Its result will be discarded when it eventually completes.
-
-Note that the application will need to make sure that resources are kept alive in the case that the operation detaches. e.g. by holding a `std::shared_ptr` to those resources or otherwise having some out-of-band way to signal completion of the operation so that resource release can be sequenced after the completion.
+> | 4.21.13. `execution::ensure_started`
+> | 
+> | execution::sender auto ensure_started(
+> |     execution::sender auto sender
+> | );
+> | 
+> | Once ensure_started returns, it is known that the provided sender has been connected 
+> | and `start` has been called on the resulting operation state (see § 5.2 Operation 
+> | states represent work); in other words, the work described by the provided sender 
+> | has been submitted for execution on the appropriate execution resources. Returns a 
+> | sender which completes when the provided sender completes and sends values equivalent 
+> | to those of the provided sender.
+> | 
+> | If the returned sender is destroyed before `execution::connect()` is called, or if
+> | `execution::connect()` is called but the returned operation-state is destroyed before 
+> | `execution::start()` is called, then a stop-request is sent to the eagerly launched 
+> | operation and the operation is detached and will run to completion in the background. 
+> | Its result will be discarded when it eventually completes.
+> | 
+> | Note that the application will need to make sure that resources are kept alive in 
+> | the case that the operation detaches. e.g. by holding a `std::shared_ptr` to those 
+> | resources or otherwise having some out-of-band way to signal completion of the 
+> | operation so that resource release can be sequenced after the completion.
 
 :::
 
 ::: rm
 
-4.22.1. `execution::start_detached`
-
-```cpp
-void start_detached(
-    execution::sender auto sender
-);
-```
-
-Like ensure_started, but does not return a value; if the provided sender sends an error instead of a value, `std::terminate` is called.
+> | 4.22.1. `execution::start_detached`
+> | 
+> | void start_detached(
+> |     execution::sender auto sender
+> | );
+> | 
+> | Like ensure_started, but does not return a value; if the provided sender sends 
+> | an error instead of a value, `std::terminate` is called.
 
 :::
 
