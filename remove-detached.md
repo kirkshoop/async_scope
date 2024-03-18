@@ -18,6 +18,27 @@ The authors of P2300 are aware of implementation and usage issues for the `start
 
 These issues motivated the creation of a facility that solves these issues. The new facility is called async-scope proposed in [@P3149R0].
 
+ensure_started
+==============
+
+Senders are generally assumed to be safe to destroy at any point. It is common to have algorithms that senders can be composed with that are not guaranteed to connect/start their child senders.
+
+However, `ensure_started()` returns a sender that owns work that is potentially already executing asynchronously in the background.
+
+If this `ensure_started()` sender is destroyed without being connected/started then we need to specify the semantics of what will happen to that already-started asynchronous work. There are four common strategies for what to do in this case:
+
+1. Block in the destructor until the asynchronous operation completes - can easily lead to deadlock.
+1. Detaching from the async operation, letting it run to completion in the background - makes it hard to implement clean shut-down.
+1. Treat it as undefined-behavior.
+1. Terminate the program - the strategy that `std::thread` takes.
+
+The current `ensure_started()` wording chooses option 2 as the least worst option, but all of the options are generally bad options.
+
+start_detached
+==============
+
+There is no support for waiting for the detached work to complete. Clean process exit and safe access to in-memory objects, can only be achieved by using ad-hoc GC such as shared_ptr and ad-hoc synchronization with process exit.
+
 Proposal
 ========
 
