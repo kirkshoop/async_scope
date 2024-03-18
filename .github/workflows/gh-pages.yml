@@ -3,7 +3,7 @@ name: Github Pages
 on:
   push:
     branches:
-      - d3149r1
+      - d3149r2
   workflow_dispatch:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
