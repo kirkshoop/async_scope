@@ -8,36 +8,91 @@ audience:
 author:
   - name: Kirk Shoop
     email: <kirk.shoop@gmail.com>
+  - name: Lewis Baker
+    email: <lewissbaker@gmail.com>
 toc: false
 ---
 
 Introduction
 ============
 
-The authors of P2300 are aware of implementation and usage issues for the `start_detached` and `ensure_started`. 
+The current version of P2300 includes two algorithms that operate on senders, `start_detached()` and `ensure_started()`
+which provide functionality that enables sender-based operations to be launched eagerly, allowing them to run in the
+background.
 
-These issues motivated the creation of a facility that solves these issues. The new facility is called async-scope proposed in [@P3149R0].
+However, the current design of these facilities would introduce major footguns in the standard library
+as they are deceptively enticing yet difficult to use correctly, making it much harder to guarantee
+code safely cleans up resources used by the eagerly launched operations.
 
-ensure_started
-==============
+The paper [P3149R1] proposes an alternative async-scope facility that provides the ability to launch
+work eagerly while still retaining the ability to later join the completion of that work, allowing
+cleanup to still be performed safely.
 
-Senders are generally assumed to be safe to destroy at any point. It is common to have algorithms that senders can be composed with that are not guaranteed to connect/start their child senders.
+This paper proposes that the `start_detached()` and `ensure_started()` facilities be removed
+from P2300 before it is merged into the working draft.
+
+`ensure_started`
+================
+
+Senders are generally assumed to be safe to destroy at any point. It is common to have algorithms that compose senders but that do not guarantee to connect/start their child senders, whether due to exceptions or some short-circuiting behaviour of the algorithm.
 
 However, `ensure_started()` returns a sender that owns work that is potentially already executing asynchronously in the background.
 
 If this `ensure_started()` sender is destroyed without being connected/started then we need to specify the semantics of what will happen to that already-started asynchronous work. There are four common strategies for what to do in this case:
 
 1. Block in the destructor until the asynchronous operation completes - can easily lead to deadlock.
-1. Detaching from the async operation, letting it run to completion in the background - makes it hard to implement clean shut-down.
+1. Detaching from the async operation, letting it run to completion in the background - makes it hard to implement clean shut-down as you don't necessarily know when resources used by the async operation can be safely destroyed.
 1. Treat it as undefined-behavior.
 1. Terminate the program - the strategy that `std::thread` takes.
-
+  
 The current `ensure_started()` wording chooses option 2 as the least worst option, but all of the options are generally bad options.
 
-start_detached
-==============
+The `ensure_started()` facility is especially dangerous as the returned sender is much more likely to be
+composed with sender adaptors into other operations and work most of the time, but introduce non-obvious
+data races that may only occur on failure-codepaths.
 
-There is no support for waiting for the detached work to complete. Clean process exit and safe access to in-memory objects, can only be achieved by using ad-hoc GC such as shared_ptr and ad-hoc synchronization with process exit.
+The functionality previously provided by `std::execution::ensure_started()`, which allows eagerly starting
+an operation and then later observing the result, can be obtained by using facilities proposed by [P3149].
+
+Instead of writing:
+```c++
+std::execution::ensure_started(sender)
+```
+you would write:
+```c++
+std::execution::spawn_future(scope, sender)
+```
+where `scope` is some `std::execution::counting_scope` object.
+
+If the sender returned by `spawn_future()` is destroyed before it is connected/started then a stop request
+is sent and the sender detaches from the operation.
+
+The operation can still then complete asynchronously in the background and can be later joined using the
+`scope.join()` facility on the `counting_scope` object.
+
+This allows callers to wait until any eagerly launched operation completes and stops accessing
+resources and thus can safely sequence destruction of those resources to occur after all uses.
+
+`start_detached`
+================
+
+Like `ensure_started()`, the `start_detached()` facility allows you to eagerly launch
+an async operation in the background, only without returning a sender that can be used
+to later join the work.
+
+This has the same challenges as `ensure_started()` with regards to support for safe
+cleanup of resources used by the launched operations.
+
+However, it's slightly less dangerous than `ensure_started()` because it has a scarier name
+and does not return a value that users might mistakenly think they can safely compose with
+other algorithms.
+
+It still requires other out-of-band mechanisms for joining the detached work before you can
+safely destroy resources used by the detached operations are destroyed.
+For example, by using ad-hoc GC such as shared_ptr or other synchronization primitives.
+
+The functionality provided by `start_detached(s)` can be provided instead using an async scope
+by calling `std::execution::spawn(scope, s)` for some async-scope, `scope`.
 
 Proposal
 ========
