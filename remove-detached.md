@@ -60,7 +60,7 @@ std::execution::ensure_started(sender)
 ```
 you would write:
 ```c++
-std::execution::spawn_future(scope, sender)
+std::execution::spawn_future(sender, scope)
 ```
 where `scope` is some `std::execution::counting_scope` object.
 
@@ -92,7 +92,7 @@ safely destroy resources used by the detached operations are destroyed.
 For example, by using ad-hoc GC such as shared_ptr or other synchronization primitives.
 
 The functionality provided by `start_detached(s)` can be provided instead using an async scope
-by calling `std::execution::spawn(scope, s)` for some async-scope, `scope`.
+by calling `std::execution::spawn(s, scope)` for some async-scope, `scope`.
 
 Proposal
 ========
