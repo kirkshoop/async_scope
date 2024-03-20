@@ -1,7 +1,7 @@
 ---
 title: "remove ensure_started and start_detached from P2300"
 subtitle: "Draft Proposal"
-document: D3187R0
+document: D3187R1
 date: today
 audience:
   - "LEWG Library Evolution"
@@ -13,23 +13,33 @@ author:
 toc: false
 ---
 
+Changes
+=======
+
+R0 - initial draft
+R1 - add removal of execute
+
 Introduction
 ============
 
-The current version of P2300 includes two algorithms that operate on senders, `start_detached()` and `ensure_started()`
-which provide functionality that enables sender-based operations to be launched eagerly, allowing them to run in the
-background.
+The current version of P2300 includes two algorithms that operate on senders, `start_detached()` 
+and `ensure_started()` which provide functionality that enables sender-based operations to be 
+launched eagerly, allowing them to run in the background.
 
 However, the current design of these facilities would introduce major footguns in the standard library
 as they are deceptively enticing yet difficult to use correctly, making it much harder to guarantee
 code safely cleans up resources used by the eagerly launched operations.
 
-The paper [P3149R1] proposes an alternative async-scope facility that provides the ability to launch
+The paper [@P3149R0] proposes an alternative async-scope facility that provides the ability to launch
 work eagerly while still retaining the ability to later join the completion of that work, allowing
 cleanup to still be performed safely.
 
-This paper proposes that the `start_detached()` and `ensure_started()` facilities be removed
+This paper proposes that:
+
+1. The `start_detached()` and `ensure_started()` facilities be removed
 from P2300 before it is merged into the working draft.
+1. The `execute()` facility be removed from P2300 before it is merged 
+into the working draft.
 
 `ensure_started`
 ================
@@ -93,6 +103,28 @@ For example, by using ad-hoc GC such as shared_ptr or other synchronization prim
 
 The functionality provided by `start_detached(s)` can be provided instead using an async scope
 by calling `std::execution::spawn(s, scope)` for some async-scope, `scope`.
+
+`execute`
+=========
+
+Like `start_detached()`, the `execute()` facility allows you to eagerly launch
+an async operation in the background.
+
+This has the same challenges as `start_detached()` with regards to support for safe
+cleanup of resources used by the launched operations.
+
+The description of `execute()` in [@P2300R7] refers to `start_detached()` as a means of implementing `execute()`.
+
+> | 4.23. execution::execute
+..
+> | Submits the provided function for execution on the provided scheduler, as-if by:
+> | 
+> | auto snd = execution::schedule(sched);
+> | auto work = execution::then(snd, fn);
+> | execution::start_detached(work);
+
+The functionality provided by `execute(sched, fn)` can be provided instead using an async scope
+by calling `std::execution::spawn(std::execution::then(s, fn), scope)` for some async-scope, `scope`.
 
 Proposal
 ========
@@ -323,5 +355,49 @@ Remove `ensure_started` and `start_detached` from [@P2300R7] by removing the fol
 > | connecting it with a receiver that ignores value and stopped completion 
 > | operations and calls terminate() on error completions, the behavior of calling 
 > | start_detached(s) is undefined.
+
+:::
+
+
+Remove `execute` from [@P2300R7] by removing the following sections.
+
+::: rm
+
+> | 4.23. execution::execute
+> | In addition to the three categories of functions presented above, we also 
+> | propose to include a convenience function for fire-and-forget eager one-way 
+> | submission of an invocable to a scheduler, to fulfil the role of one-way executors from P0443.
+> | 
+> | void execution::execute(
+> |     execution::schedule auto sched,
+> |     std::invocable auto fn
+> | );
+> | Submits the provided function for execution on the provided scheduler, as-if by:
+> | 
+> | auto snd = execution::schedule(sched);
+> | auto work = execution::then(snd, fn);
+> | execution::start_detached(work);
+
+:::
+
+::: rm
+
+> | 11.10. execution::execute [exec.execute]
+> | execute creates fire-and-forget tasks on a specified scheduler.
+> | 
+> | The name execute denotes a customization point object. For some subexpressions 
+> | sch and f, let Sch be decltype((sch)) and F be decltype((f)). If Sch does not 
+> | satisfy scheduler or F does not satisfy invocable, execute is ill-formed. 
+> | Otherwise, execute is expression-equivalent to:
+> | 
+> | tag_invoke(execute, sch, f), if that expression is valid. If the function selected 
+> | by tag_invoke does not invoke the function f (or an object decay-copied from f) 
+> | on an execution agent belonging to the associated execution resource of sch, or 
+> | if it does not call std::terminate if an error occurs after control is returned 
+> | to the caller, the behavior of calling execute is undefined.
+> | 
+> | Mandates: The type of the tag_invoke expression above is void.
+> | 
+> | Otherwise, start_detached(then(schedule(sch), f)).
 
 :::
