@@ -1,6 +1,6 @@
 ---
 title: "`async_scope` -- Creating scopes for non-sequential concurrency"
-document: P3149R1
+document: P3149R2
 date: today
 audience:
   - "SG1 Parallelism and Concurrency"
@@ -23,6 +23,28 @@ toc: true
 
 Changes
 =======
+
+## R2
+- Update `counting_scope::nest()` to explain when the scope's count of outstanding senders is decremented and remove
+  `counting_scope::joined()`, `counting_scope::join_started()`, and `counting_scope::use_count()` on advice of SG1 straw
+  poll:
+
+  > forward P3149R1 to LEWG for inclusion in C++26 after P2300 is included in C++26, with notes:
+  >
+  > 1. the point of refcount decrement to be moved after the child operation state is destroyed
+  > 2. a future paper should explore the design for cancellation of scopes
+  > 3. observers (joined, join_started, use_count) can be removed
+  >
+  > +---+---+---+---+---+
+  > |SF |F  |N  |A  |SA |
+  > +==:+==:+==:+==:+==:+
+  > |10 |14 |2  |0  |1  |
+  > +---+---+---+---+---+
+  > Consensus
+  >
+  > SA: we are moving something without wide implementation experience, the version with experience has cancellation of scopes
+
+- Add a fourth state to `counting_scope` so that it can be used as a data-member safely
 
 ## R1
 
@@ -574,16 +596,6 @@ struct counting_scope {
     struct @@_join-sender_@@; // @@_exposition-only_@@
 
     [[nodiscard]] @@_join-sender_@@ join() noexcept;
-
-    // observers in the spirit of std::weak_ptr<T>::expired() and
-    // std::shared_ptr<T>::use_count(); the values must be correct
-    // when computed but may be stale by the time they can be observed
-
-    [[nodiscard]] bool joined() const noexcept;
-
-    [[nodiscard]] bool join_started() const noexcept;
-
-    [[nodiscard]] size_t use_count() const noexcept;
 };
 ```
 
@@ -793,37 +805,31 @@ struct counting_scope {
     struct @@_join-sender_@@; // @@_exposition-only_@@
 
     [[nodiscard]] @@_join-sender_@@ join() noexcept;
-
-    // observers in the spirit of std::weak_ptr<T>::expired() and
-    // std::shared_ptr<T>::use_count(); the values must be correct
-    // when computed but may be stale by the time they can be observed
-
-    [[nodiscard]] bool joined() const noexcept;
-
-    [[nodiscard]] bool join_started() const noexcept;
-
-    [[nodiscard]] size_t use_count() const noexcept;
 };
 ```
 
-A `counting_scope` goes through three states during its lifetime:
+A `counting_scope` goes through four states during its lifetime:
 
-1. open
-2. closed/joining
-3. joined
+1. unused
+2. open
+3. closed/joining
+4. joined
 
-Instances start in the open state after being constructed. Connecting and starting a _`join-sender`_ returned from
-`join()` transitions the scope to the closed/joining state. Merely calling `join()` or connecting the _`join-sender`_
-does not change the scope's state---the _`operation-state`_ must be started to close the scope. The scope transitions
-from the closed/joining state to the joined state when the _`join-sender`_ completes. A scope must be in the joined
-state when its destructor starts; otherwise, the destructor invokes `std::terminate()`.
+Instances start in the unused state after being constructed. This is the only time the scope's state can be set to
+unused. Connecting and starting a _`join-sender`_ returned from `join()` transitions the scope to the closed/joining
+state. Merely calling `join()` or connecting the _`join-sender`_ does not change the scope's state---the
+_`operation-state`_ must be started to close the scope. The scope transitions from the closed/joining state to the
+joined state when the _`join-sender`_ completes. A scope must be in the joined or unused state when its destructor
+starts; otherwise, the destructor invokes `std::terminate()`. Permitting destruction in the unused state ensures that
+`counting_scope` can be used safely as a data-member type while preserving structured functionality.
 
-While a scope is open, calls to `nest(snd, scope)` will succeed (unless an exception is thrown by `snd`'s copy- or
-move-constructor while constructing the _`nest-sender`_). Each time a call to `nest(snd, scope)` succeeds, two things
-happen:
+While a scope is unused or open, calls to `nest(snd, scope)` will succeed (unless an exception is thrown by `snd`'s
+copy- or move-constructor while constructing the _`nest-sender`_). Each time a call to `nest(snd, scope)` succeeds,
+three things happen:
 
-1. the scope's count of outstanding senders is incremented before `nest()` returns, and
-2. the given sender, `snd`, is wrapped in a _`nest-sender`_ and returned.
+1. if the scope was in the unused state then it transitions to the open state,
+2. the scope's count of outstanding senders is incremented before `nest()` returns, and
+3. the given sender, `snd`, is wrapped in a _`nest-sender`_ and returned.
 
 When a call to `nest()` succeeds, the returned _`nest-sender`_ is an associated sender that acts like an RAII handle:
 the scope's internal count is incremented when the sender is created and decremented when the sender is "done with the
@@ -832,6 +838,9 @@ completed. Moving a _`nest-sender`_ transfers responsibility for decrementing th
 one. Copying a _`nest-sender`_ is permitted if the sender it's wrapping is copyable, but the copy may "fail" since
 copying requires incrementing the scope's count, which is only allowed when the scope is open; if copying fails, the new
 sender is an unassociated sender that behaves as if it were the result of a failed call to `nest()`.
+
+If `nest()` is invoked on a scope in the unused state and `nest()` fails by throwing an exception, the scope remains in
+the unused state as part of providing the Strong Exception Guarantee.
 
 While a scope is closed or joined, calls to `nest(snd, scope)` will always fail by discarding the given sender and
 returning an unassociated _`nest-sender`_. Failed calls to `nest()` do not change the scope's count. Unassociated
@@ -843,7 +852,10 @@ errors. Given a resource, `res`, and a `counting_scope`, `scope`, obeying the fo
 there are no attempts to use `res` after its lifetime ends:
 
 - all senders that refer to `res` are nested within `scope`; and
-- `scope` is destroyed (and therefore joined) before `res` is destroyed.
+- `scope` is destroyed (and therefore joined or unused) before `res` is destroyed.
+
+It is safe to destroy a scope in the unused state because there can't be any work referring to the resources protected
+by the scope.
 
 Under the standard assumption that the arguments to `nest()` are and remain valid while evaluating `nest()`, it is
 always safe to invoke any supported operation on the returned _`nest-sender`_. Furthermore, if all senders returned from
@@ -884,7 +896,7 @@ could be made movable but it would cost an allocation so this is not proposed.
 counting_scope::counting_scope() noexcept;
 ```
 
-Initializes a `counting_scope` in the open state with no outstanding senders.
+Initializes a `counting_scope` in the unused state with no outstanding senders.
 
 ### `counting_scope::~counting_scope()`
 
@@ -892,7 +904,7 @@ Initializes a `counting_scope` in the open state with no outstanding senders.
 counting_scope::~counting_scope();
 ```
 
-Checks that the `counting_scope` is in the joined state and invokes `std::terminate()` if not.
+Checks that the `counting_scope` is in the joined or unused state and invokes `std::terminate()` if not.
 
 ### `counting_scope::nest()`
 
@@ -905,28 +917,47 @@ template <sender S>
         std::is_nothrow_constructible_v<std::remove_cvref_t<S>, S>);
 ```
 
-Atomically increments the scope's count of outstanding senders if and only if the scope is in the open state and then
-returns a _`nest-sender`_.
+Attempts to atomically increments the scope's count of outstanding senders, which succeeds if and only if the scope is
+in the open or unused state, and then returns a _`nest-sender`_. When invoked successfully on a scope in the unused
+state, transitions the scope to the open state upon return unless, between the increment and the return, the state has
+concurrently transitioned to closed/joining.
 
-If the atomic increment succeeded then the return value will be an associated _`nest-sender`_ that contains a reference
-to `this` (the associated scope) and a copy of the input sender, `s`, that is copy- or move-constructed from `s`. If
-this copy or move throws then, before the exception is allowed to escape to the caller, the atomic increment needs to be
-undone with a decrement to provide the strong exception guarantee.
+The result of `nest()` depends on whether the attempt to atomically increment the number of outstanding senders
+succeeds:
 
-If the atomic increment failed then the return value will be an unassociated _`nest-sender`_ and no exceptions are
-possible. In this case, the return value does not store a reference to `this` and the given sender, `s`, is discarded.
+- If the atomic increment succeeds then the return value will be an associated _`nest-sender`_ that contains a copy of
+  the input sender, `s` (that is copy- or move-constructed from `s`), and a reference to `this` (the associated scope).
+  `nest()` provides the Strong Exception Guarantee, which requires one of two different behaviours upon exiting from
+  `nest()`, depending on whether the exit is normal or exceptional:
+  - if the scope was in the unused state, `nest()` returns normally, and the scope has not yet moved to the
+    closed/joining state then the scope moves to the open state; otherwise,
+  - if `nest()` exits with an exception (which is only possible if an exception is thrown while copying or moving `s`
+    into the returned _`nest-sender`_) then the increment to the scope's count of outstanding senders that happened on
+    entry to `nest()` is undone with a balancing decrement.
+- If the atomic increment fails then the return value will be an unassociated _`nest-sender`_ and no exceptions are
+  possible. In this case, the return value does not store a reference to `this`, the given sender, `s`, is discarded,
+  and the scope's state is left unchanged.
 
 An associated _`nest-sender`_ is a kind of RAII handle to the scope; it is responsible for decrementing the scope's
 count of outstanding senders in its destructor unless that responsibility is first given to some other object.
 Move-construction and move-assignment transfer the decrement responsibility to the destination instance. Connecting an
 instance to a receiver transfers the decrement responsibility to the resulting _`operation-state`_, which must meet the
-responsibility when the operation completes or is destroyed, whichever comes first (note: if the _`operation-state`_
-is started, then the decrement should happen *after* invoking a completion method on its receiver to ensure that any
-reference produced by the nested sender is not dangling at the time of invocation). Whenever the balancing decrement
-happens (including if it happens as a side effect of allowing an exception to escape from `nest()`), it's possible that
-the scope has transitioned to the closed/joining state since the _`nest-sender`_ was constructed, which means that there
-is a _`join-sender`_ waiting to complete so, if the decrement brings the count of outstanding senders to zero then the
-waiting _`join-sender`_ needs to be notified that the scope is now joined and the sender can complete.
+responsibility when it destroys its "child operation" (i.e. the _`operation-state`_ constructed when connecting the
+sender, `s`, that was originally passed to `nest()`); it's expected that the child operation will be destroyed as a side
+effect of the _`nest-sender`_'s _`operation-state`_'s destructor.
+
+Note: the timing of when an _`operation-state`_ decrements the scope's count is chosen to avoid exposing user code to
+dangling references. Decrementing the scope's count may move the scope from the closed/joining state to the joined
+state, which would allow the waiting _`join-sender`_ to complete, potentially leading to the destruction of a resource
+protected by the scope. In general, it's possible that the _`nest-sender`_'s receiver or the child operation's
+destructor may dereference pointers to the protected resource so their execution must be completed before the scope
+moves to the joined state.
+
+Whenever the balancing decrement happens (including if it happens as a side effect of allowing an exception to escape
+from `nest()`), it's possible that the scope has transitioned to the closed/joining state since the _`nest-sender`_ was
+constructed, which means that there is a _`join-sender`_ waiting to complete. If the decrement brings the count of
+outstanding senders to zero then the waiting _`join-sender`_ must be notified that the scope is now joined and the
+sender can complete.
 
 A call to `nest()` does not start the given sender. A call to `nest()` is not expected to incur allocations other than
 whatever might be required to move or copy `s`.
@@ -957,59 +988,15 @@ struct @@_join-sender_@@; // @@_exposition-only_@@
 ```
 
 Returns a _`join-sender`_. When the _`join-sender`_ is connected to a receiver, `r`, it produces an
-_`operation-state`_, `o`. When `o` is started, the scope moves from the open state to the closed/joining state. `o`
-completes with `set_value()` when the scope moves from the closed/joining state to the closed state, which happens when
-the scope's count of outstanding senders drops to zero. `o` may complete synchronously if it happens to observe that the
-count of outstanding senders is already zero when started; otherwise, `o` completes on the execution context it was
-started on by asking its receiver, `r`, for a scheduler, `sch`, with `get_scheduler(get_env(r))` and then starting the
-sender returned from `schedule(sch)`. This requirement to complete on the receiver's scheduler restricts which receivers
-a _`join-sender`_ may be connected to in exchange for determinism; the alternative would have the _`join-sender`_
-completing on the execution context of whichever nested operation happens to be the last one to complete.
-
-### `counting_scope::joined()`
-
-```cpp
-[[nodiscard]] bool joined() const noexcept;
-```
-
-Returns `true` if the scope is in the joined state (i.e. a _`join-sender`_ returned from `join()` has been connected and
-started, and the count of outstanding senders has dropped to zero).
-
-`joined()` returning `true` implies that `join_started()` will also return `true` and `use_count()` will return `0`.
-
-`joined()` must not introduce data races but need not synchronize with anything.
-
-_Note:_ if `joined()` returns `true` then it will never again return `false` however, it's possible for a return of
-`false` to be stale by the time it is observed since another thread of execution may be racing to complete a waiting
-_`join-sender`_.
-
-### `counting_scope::join_started()`
-
-```cpp
-[[nodiscard]] bool join_started() const noexcept;
-```
-
-Returns `true` if the scope is in the closed/joining state or the joined state (i.e. returns `true` if a _`join-sender`_
-has been connected and started) and `false` otherwise.
-
-`join_started()` must not introduce data races but need not synchronize with anything.
-
-_Note:_ if `join_started()` returns `true` then it will never again return `false` however, it's possible for a return
-of `false` to be stale by the time it is observed since another thread of execution may be racing to start a
-_`join-sender`_.
-
-### `counting_scope::use_count()`
-
-```cpp
-[[nodiscard]] size_t use_count() const noexcept;
-```
-
-Returns the number of senders that have been associated with this scope that have not yet completed.
-
-`use_count()` must not introduce data races but need not synchronize with anything.
-
-_Note:_ it is likely that the return value is stale by the time it's observed since another thread of execution may be
-racing to nest a new sender or complete an old one.
+_`operation-state`_, `o`. When `o` is started, the scope moves from either the unused or open state to the
+closed/joining state. `o` completes with `set_value()` when the scope moves from the closed/joining state to the closed
+state, which happens when the scope's count of outstanding senders drops to zero. `o` may complete synchronously if it
+happens to observe that the count of outstanding senders is already zero when started; otherwise, `o` completes on the
+execution context associated with the scheduler in its receiver's environment by asking its receiver, `r`, for a
+scheduler, `sch`, with `get_scheduler(get_env(r))` and then starting the sender returned from `schedule(sch)`. This
+requirement to complete on the receiver's scheduler restricts which receivers a _`join-sender`_ may be connected to in
+exchange for determinism; the alternative would have the _`join-sender`_ completing on the execution context of
+whichever nested operation happens to be the last one to complete.
 
 Design considerations
 =====================
@@ -1115,7 +1102,7 @@ As is often true, naming is a difficult task.
 This provides a way to build a sender that is associated with a "scope", which is a type that implements and enforces
 some bookkeeping policy regarding the senders nested within it. `nest()` does not allocate state, call connect, or call
 start. `nest()` is the basis operation for async scopes. `spawn()` and `spawn_future()` use `nest()` to associate a
-given sender with a given scope, and then they allocate, connect, and start the given sender.
+given sender with a given scope, and then they allocate, connect, and start the resulting sender.
 
 It would be good for the name to indicate that it is a simple operation (insert, add, embed, extend might communicate
 allocation, which `nest()` does not do).
@@ -1148,10 +1135,10 @@ alternatives: `connect_and_start()`, `spawn_detached()`, `fire_and_remember()`
 
 ## `spawn_future()`
 
-This provides a way to start work and later ask for the result. This will allocate, connect, start, and resolve the race
-(using synchronization primitives) between the completion of the given sender and the start of the returned sender.
-Since the type of the receiver supplied to the result sender is not known when the given sender starts, the receiver
-will be type-erased when it is connected.
+This provides a way to start work and later ask for the result. This will allocate, connect, and start the given sender,
+while resolving the race (using synchronization primitives) between the completion of the given sender and the start of
+the returned sender. Since the type of the receiver supplied to the result sender is not known when the given sender
+starts, the receiver will be type-erased when it is connected.
 
 It would be good for the name to be ugly, to indicate that it is a more expensive operation than `spawn()`.
 
@@ -1186,41 +1173,6 @@ less-than-ideal in C++, and there is some real risk that users will write deadlo
 should have a name that conveys danger.
 
 alternatives: `complete()`, `close()`
-
-### `counting_scope::joined()`
-
-This method starts returning `true` once the _`join-sender`_ completes and it means "`join()` was called and its work
-has finished". The name should be the past participle of whichever verb is chosen for `join()` (e.g. `completed()` or
-`closed()`).
-
-The result of `joined()` may be stale before it can be observed, like `std::weak_ptr<>::expired()`, so users may find
-the name more obvious if it communicated this staleness.
-
-alternatives: `completed()`, `closed()`
-
-### `counting_scope::join_started()`
-
-This method starts returning `true` once the _`join-sender`_ has been started and it means that the scope will no longer
-permit new senders to be associated with it via calls to `nest()`. The name was chosen for its directness:
-`join_started()` is true when the `join()` operation has started.
-
-Like `join()`, the result may be stale before it can be observed.
-
-alternatives: `joining()`, `closing()`, `completing()`
-
-### `counting_scope::use_count()`
-
-This method returns the scope's count of outstanding senders (i.e. the number of senders that have been associated with
-the scope via calls to `nest()` and that haven't been discarded or completed, yet).
-
-Like `join()` and `join_started()`, the result may be stale before it can be observed. Unlike those two methods, there
-isn't a simple rule like "once it hits zero it stays there" since new work may always be added to the scope so long as
-the _`join-sender`_ hasn't been started.
-
-The name was chosen by analogy with `std::shared_ptr<>::use_count()`; both represent reference counts that may be
-immediately stale and for which the 1 -> 0 transition is significant.
-
-alternatives: `outstanding_senders()`
 
 Acknowledgements
 ================
