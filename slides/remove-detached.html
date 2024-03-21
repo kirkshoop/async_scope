@@ -199,6 +199,7 @@ class: middle
 # P3187 - remove ensure_started and start_detached from P2300
 
 .accent[
+  .. and remove execute from P2300
 ]
 
 ]
@@ -209,15 +210,184 @@ class: middle
 
 ---
 
+# detached work
+
+## Detached work
+
+### - Does not allow callers to wait until the work completes and stops accessing resources. 
+### - Requires ad-hoc mechanisms to safely sequence destruction of resources to occur after all uses.
+
+> #### for example, ad-hoc GC using `std::shared_ptr` is often used to non-deterministically sequence resource destruction after work completion
+
 ???
 
 > * 
 
 ---
 
+# no-detached-work
+
+> ### no-detached-work is religious in the same way that no-raw-new is religious and goto-is-harmful is religious. 
+> ### The common theme in each one is that structure (async-scope, RAII, if/for) produces better code.
+
 ???
 
 > * 
+
+---
+
+# The current version of P2300 includes three algorithms that create detached work:
+
+## - `ensure_started()`
+## - `start_detached()` 
+## - `execute()`
+
+???
+
+> * 
+
+---
+
+# `ensure_started()` returns a sender
+
+> ### Senders are generally assumed to be safe to destroy at any point.
+
+## The sender returned from `ensure_started()` 
+
+### - represents running work.
+### - is not safe to destroy.
+
+???
+
+> * 
+
+---
+
+# `ensure_started()` returns a sender
+
+### Options when destroying the Sender
+
+1. ### Block in the destructor
+1. ### Detach from the async operation .accent[ <- current behaviour ]
+1. ### undefined-behavour
+1. ### Terminate the program
+
+> All these options are all harmful
+
+???
+
+> * 
+
+---
+
+# P3149 - async-scope
+
+.split-50[
+
+.column[
+
+### Before
+
+]
+
+.column[
+
+### After
+
+]
+]
+
+.split-50[
+
+.column[
+
+```cpp
+std::execution::ensure_started(sender)
+```
+
+]
+
+.column[
+
+```cpp
+std::execution::spawn_future(sender, scope)
+```
+
+]
+]
+
+.split-50[
+
+.column[
+
+```cpp
+std::execution::start_detached(sender)
+```
+
+]
+
+.column[
+
+```cpp
+std::execution::spawn(sender, scope)
+```
+
+]
+]
+
+.split-50[
+
+.column[
+
+```cpp
+std::execution::execute(scheduler, function)
+```
+
+]
+
+.column[
+
+```cpp
+auto sender = 
+  std::execution::schedule(scheduler);
+auto work = 
+  std::execution::then(sender, function);
+
+std::execution::spawn(work, scope);
+```
+
+]
+]
+
+> suggest a new async-scope algorithm to cover the convenience of `execute()`
+
+???
+
+> * 
+
+---
+
+# P3149 - async-scope
+
+### spawn & spawn_future work great on an async-scope that is created and joined in the main loop.
+
+???
+
+> * 
+
+---
+
+# Choices
+
+1. ### standardize detached work in P2300
+1. ### standardize no-detached-work in P2300
+
+> In either case, async-scope with spawn & spawn_future would satisfy the usage scenarios without detached work.
+
+???
+
+> * 
+
     </textarea>
     <!-- <script src="https://gnab.github.io/remark/downloads/remark-latest.min.js" type="text/javascript" >
     </script> -->
