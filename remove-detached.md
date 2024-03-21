@@ -116,9 +116,9 @@ cleanup of resources used by the launched operations.
 The description of `execute()` in [@P2300R7] refers to `start_detached()` as a means of implementing `execute()`.
 
 > | 4.23. execution::execute
-..
+> | ..
 > | Submits the provided function for execution on the provided scheduler, as-if by:
-> | 
+> |
 > | auto snd = execution::schedule(sched);
 > | auto work = execution::then(snd, fn);
 > | execution::start_detached(work);
