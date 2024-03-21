@@ -1,7 +1,10 @@
 include wg21/Makefile
 
-.PHONY: deploy
-deploy: $(PDF)
-	rm -rf "./generated/slides"
-	mkdir -p "./generated/slides"
-	cp -R ./slides/* "./generated/slides/"
+override SLIDES_DIR := ./slides
+override SLIDES_OUT_DIR := $(OUTDIR)/slides
+
+.PHONY: slides
+slides:
+	rm -rf "$(SLIDES_OUT_DIR)"
+	mkdir -p "$(SLIDES_OUT_DIR)"
+	cp -R "$(SLIDES_DIR)" "$(OUTDIR)"

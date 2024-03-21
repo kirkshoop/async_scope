@@ -57,9 +57,9 @@ jobs:
       - name: build pdf
         run: |
           make pdf
-      - name: deploy
+      - name: build slides
         run: |
-          make deploy
+          make slides
 
       - name: Setup Pages
         uses: actions/configure-pages@v2
