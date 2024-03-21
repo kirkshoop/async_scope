@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Remove-Detached</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="./fonts.css"/>
+    <link rel="stylesheet" href="./mermaid.forest.css">
+    <style>
+        @page {
+            size: 1210px 681px;
+            margin: 0;
+        }
+
+        @media print {
+            .remark-slide-scaler {
+                width: 100% !important;
+                height: 100% !important;
+                transform: scale(1) !important;
+                top: 0 !important;
+                left: 0 !important;
+            }
+        }
+
+        body { font-family: 'Droid Serif'; }
+        h1, h2, h3 {
+            font-family: 'Yanone Kaffeesatz';
+            font-weight: normal;
+        }
+        .remark-code, .remark-inline-code { font-family: 'Droid Sans Mono'; }
+        .remark-inline-code {
+          color:#585260;
+        }
+        .remark-slide-content {
+            padding-bottom: 4em;
+        }
+        div.footer {
+            position: absolute;
+            bottom: 12px;
+            width: 100%;
+            opacity: .6;
+        }
+        .footer .flexcontainer {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            margin-right: 190px;
+        }
+
+        .border {
+            border: 2px solid steelblue;
+        }
+
+        div.emscripten-output {
+            font-family: 'Droid Sans Mono';
+            font-size: 14pt;
+            border: 2px solid steelblue;
+            padding: 5px;
+            background: black;
+            color: lightgreen;
+        }
+
+        img {
+            width: 80%;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            padding: 5px;
+            border: 1px solid steelblue;
+        }
+        th {
+            border-bottom: 3px solid steelblue;
+            color: black;
+        }
+        pre {
+            margin: 0.2em 0px 0.2em
+        }
+        
+        .accent {
+            color: seagreen
+        }
+        .hidden {
+            visibility: hidden
+        }
+
+        .scale-p5 {
+          transform: scale(0.5);
+          transform-origin: top left;
+        }
+        .scale-p75 {
+          transform: scale(0.75);
+          transform-origin: top left;
+        }
+        .scale-p8 {
+          transform: scale(0.8);
+          transform-origin: top left;
+        }
+        .scale-p9 {
+          transform: scale(0.9);
+          transform-origin: top left;
+        }
+
+        .image-10 img {width: 10%}
+        .image-20 img {width: 20%}
+        .image-30 img {width: 30%}
+        .image-40 img {width: 40%}
+        .image-50 img {width: 50%}
+        .image-60 img {width: 60%}
+        .image-70 img {width: 70%}
+        .image-80 img {width: 80%}
+
+        .column:first-of-type {float:left}
+        .column:last-of-type {float:right}
+
+        .split-30 .column:first-of-type {width: 30%}
+        .split-30 .column:last-of-type {width: 69%}
+        .split-30:after {
+          clear: both;
+          content: '';
+          display: block;
+        }
+        .split-40 .column:first-of-type {width: 40%}
+        .split-40 .column:last-of-type {width: 59%}
+        .split-40:after {
+          clear: both;
+          content: '';
+          display: block;
+        }
+        .split-50 .column:first-of-type {width: 50%}
+        .split-50 .column:last-of-type {width: 49%}
+        .split-50:after {
+          clear: both;
+          content: '';
+          display: block;
+        }
+        .split-60 .column:first-of-type {width: 60%}
+        .split-60 .column:last-of-type {width: 39%}
+        .split-60:after {
+          clear: both;
+          content: '';
+          display: block;
+        }
+        .split-70 .column:first-of-type {width: 70%}
+        .split-70 .column:last-of-type {width: 29%}
+        .split-70:after {
+          clear: both;
+          content: '';
+          display: block;
+        }
+
+        .column ul:first-of-type {
+            margin: .2em
+        }
+
+
+        blockquote {
+            background: lightgray ;
+            border-left: 10px solid deepskyblue;
+            margin: 1.5em 0px;
+            padding: 0.5em 10px;
+            quotes: "\201C""\201D""\2018""\2019";
+        }
+        blockquote:before {
+            color: #ccc;
+            font-size: 4em;
+            line-height: 0.1em;
+            margin-right: 0.25em;
+            vertical-align: -0.4em;
+        }
+        blockquote p {
+            display: inline;
+        }
+
+        .mermaid p {
+            display: inline;
+        }
+        .mermaid svg {
+          display: inline;
+          margin: auto;
+          max-height: 480px
+        }
+    </style>
+  </head>
+  <body>
+    <textarea hidden=true id="source">
+
+layout: true
+<div class="footer"><div class="flexcontainer"><span>.body[[[http://wg21.link/P3187](http://wg21.link/P3187)]]</span><span>.center[]</span><span>.body[&copy; 2024 Kirk Shoop ([github](http://github.com/kirkshoop))]</span></div></div>
+
+---
+
+class: middle
+
+.center[
+
+# P3187 - remove ensure_started and start_detached from P2300
+
+.accent[
+]
+
+]
+
+???
+
+> * 
+
+---
+
+???
+
+> * 
+
+---
+
+???
+
+> * 
+    </textarea>
+    <!-- <script src="https://gnab.github.io/remark/downloads/remark-latest.min.js" type="text/javascript" >
+    </script> -->
+    <script src="./remark-latest.min.js" type="text/javascript" >
+    </script>
+    <script src="./CustomElements.min.js" type="text/javascript" >
+    </script>
+    <script src="./element.js" type="text/javascript" >
+    </script>
+    <script src="./mermaid.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML&delayStartupUntil=configured" type="text/javascript" >
+    </script>
+    <script>
+
+        var slideshow = remark.create({
+            ratio: "16:9",
+            highlightLanguage: "cpp",
+            highlightStyle: "atelier-cave-light",
+            highlightLines: true,
+            highlightSpans: true
+        });
+
+        MathJax.Hub.Config({
+            displayAlign: "center",
+            tex2jax: {
+                skipTags: ['script', 'noscript', 'style', 'textarea', 'pre'],
+                inlineMath: [['$','$'], ['\\(','\\)']]
+            }
+        });
+        MathJax.Hub.Configured();
+
+        mermaid.initialize({
+          mermaid: {
+            startOnLoad: false,
+            cloneCssStyles: false
+          }
+        });
+
+        function initMermaid(slide) {
+          try {
+            mermaid.init(undefined, '.remark-visible .mermaid p');
+          } catch(e) {
+            console.log(e);
+          }
+        }
+        initMermaid(slideshow.getSlides()[slideshow.getCurrentSlideIndex()]);
+
+        slideshow.on("afterShowSlide", function(slide) {
+            initMermaid(slide);
+        });
+        slideshow.on("print", function(slide) {
+            initMermaid(slide);
+        });
+    </script>
+      </body>
+</html>
