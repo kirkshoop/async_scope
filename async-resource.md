@@ -765,13 +765,30 @@ This provided users with correct-by-construction usage. The implementation of _`
 
 #### `async_construct()`, `async_destruct()`, `object`, `handle`, and `storage`
 
-This design followed from feedback that the design was too complex and that the constraints that it placed on the usage limited the ways in which _`async-object`_ s could be composed.
+This design followed from feedback that the previous designs had semantics that were difficult to explain and required _`async-object`_ implementations to be very complex and placed constraints on the usage that limited the ways in which _`async-object`_ s could be composed.
 
-The feedback suggested that the object should be concerned with construction and destruction and not with how those are composed during usage.
+The feedback suggested that the object should be concerned with construction and destruction and not with how those are composed during usage. It was recommended that the design of objects in the language with independent functions to construct and destruct was the model to follow.
+
+The result is that an implementation of an _`async_object`_ is not very complex. The complexity is in the `async_using()` and `make_async_tuple()` implementations.
 
 Most of the previous designs had something like `async_using()`, but this is the first implementation of `async_using()` that supported a pack of objects. This is also the first time that the `async_tuple<>` type was implemented to compose multiple _`async-object`_ s as members of a containing _`async-object`_.
 
-The success in implementing the composition of _`async-object`_ s using this design to support these different use cases is encouraging.
+The success in implementing the composition of _`async-object`_ s to support these different use cases is an encouraging confirmation of this design.
+
+##### variation:
+
+There has been discussion about another way to achieve the ability for `async_using()` and `make_async_tuple()` to take a pack of _`async-object`_ s to compose.
+
+The _`async-object`_ would drop the `storage` member type. The _`async-object`_ would be immovable and default-constructible (it would become the `storage` type). The `async_construct()` and `async_destruct()` functions would remove the `storage&` arguments and use `this` to access the storage.
+
+In this design, the `packaged_async_object` would not be an _`async-object`_. An _`async-object`_ would be immovable, but `packaged_async_object` must be moveable since it stores the pack of `async_construct()` arguments and must be passed as part of the pack given to `async_using()` and `make_async_tupe()`. The `packaged_async_object` type would almost be an _`async_object`_ in this design. It would have `async_construct()` and `async_destruct()` members. It would need a `storage` type member that is the actual _`async-object`_. usage would require that the caller reserve space for the `storage` and pass the `storage` ref to `async_construct()` and `async_destruct()`.
+
+This variation would require two concepts that have a lot of overlap. 
+
+- _`async-object`_ would be immoveable and have a `handle` type member and `async_construct()` and `async_destruct()` members.
+- _`packaged-async-object`_ would be moveable and have a `storage` type member and `async_construct()` and `async_destruct()` members that take a reference to the `storage`.
+
+The design selected in this paper chooses to have one concept that can be satisfied by all _`async-object`_ s, including `packaged_async_object`.
 
 Implementation Experience
 =========================
