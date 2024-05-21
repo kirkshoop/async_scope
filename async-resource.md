@@ -1,7 +1,7 @@
 ---
 title: "async-object - aka async-RAII"
-subtitle: "Draft Proposal"
-document: D2849R0
+subtitle: "Proposal"
+document: P2849R0
 date: today
 audience:
   - "LEWG Library Evolution"

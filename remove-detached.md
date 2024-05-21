@@ -1,7 +1,7 @@
 ---
 title: "remove ensure_started and start_detached from P2300"
-subtitle: "Draft Proposal"
-document: D3187R1
+subtitle: "Proposal"
+document: P3187R1
 date: today
 audience:
   - "LEWG Library Evolution"
