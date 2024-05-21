@@ -236,11 +236,13 @@ It has been suggested that adding a `let_stop_source(sender, sender(inplace_stop
 
 What is missing is a way to attach an _`async-object`_ to a sender expression such that the _`async-object`_ is constructed asynchronously before any nested _`async-function`_ s start and is destructed asynchronously after all nested _`async-function`_ s complete. 
 
-Asynchronous lifetimes in async programs often use `std::shared_ptr` to implement ad-hoc garbage collection of regular objects. Using garbage collection for this purpose removes structure from the code, because the shared ownership allows objects to escape the original scope in which they were created. Using regular objects for this purpose make async construction and async destruction ad-hoc such that no generic algorithms can compose multiple objects with asynchronous lifetimes.
+Asynchronous lifetimes in programs often use `std::shared_ptr` to implement ad-hoc garbage collection of objects used by asynchronous code. Using garbage collection for this purpose removes structure from the code, because the shared ownership allows objects to escape the original scope in which they were created. 
 
-The C++ language has a set of rules that are applied in a code-block to describe when construction and destruction of regular objects occur, and to scope access to the successfully constructed objects within the code-block. The language implements those rules.
+Using objects like this in asynchronous code results in ad-hoc solutions for _`async-construction`_ and _`async-destruction`_. No generic algorithms can compose multiple objects with asynchronous lifetimes when the _`async-construction`_ and _`async-destruction`_ are ad-hoc and follow no generic design.
 
-This paper describes how to implement rules for the construction and destruction of _`async-object`_ s using sender/receiver in the library. This paper describes structured construction and destruction of objects in terms of _`async-function`_ '. The `async_using()` algorithm described in this paper is a library implementation of an async code-block containing one or more local variables. The `async_using()` algorithm is somewhat analogous to the `using` keyword in some languages.
+The C++ language has a set of rules that are applied in a code-block to describe when construction and destruction of objects occur, and has rules that scope access to the successfully constructed objects within the code-block. The language implements those rules.
+
+This paper describes how to implement rules for the construction and destruction of _`async-object`_ s, using sender/receiver, in the library. This paper describes structured construction and destruction of objects in terms of _`async-function`_ s. The `async_using()` algorithm described in this paper is a library implementation of an async code-block containing one or more local variables. The `async_using()` algorithm is somewhat analogous to the `using` keyword in some languages.
 
 Design
 ======
@@ -299,11 +301,11 @@ What is the concept that an _`async-object`_ must satisfy?
 
 An _`async-object`_ provides the _`async-function`_ s `async_construct` and `async_destruct` to construct an _`async-object`_. 
 
-An _`async-object`_ provides the `object` type that contains the state for the constructed _`async-object`_. An `object` type must be immovable so that a moveable `handle` can refer to the `object`.
+An _`async-object`_ provides the `object` type that contains the state for the constructed _`async-object`_. An `object` type must be immovable so that a moveable `handle` can refer to the constructed `object`. The constructors of the `object` type must only be available to the _`async-object`_ implementation.
 
-An _`async-object`_ provides the `handle` type that is a ref-type that refers to the constructed `object`. A `handle` type must be moveable so that it can be passed into nested _`async-function`_.
+An _`async-object`_ provides the `handle` type that is a ref-type that refers to the constructed `object`. A `handle` type must be moveable so that it can be passed into nested _`async-function`_. A `handle` type is not allowed to be empty, it is either moved-from and invalid to use or it refers to constructed `object`.
 
-An _`async-object`_ provides the `storage` type that contains storage for the `object`. A `storage` type must be default-constructible and immovable. This allows the `storage` to be reserved prior to construction and the `object` constructed into it later and for the `handle` to refer to the constucted `object`.
+An _`async-object`_ provides the `storage` type that contains storage for the `object`. A `storage` type must be default-constructible and immovable. This allows the `storage` to be reserved prior to construction of the `object` within and for the `handle` to refer to the constucted `object`.
 
 A successfully constructed _`async-object`_ :
 
@@ -708,7 +710,7 @@ end
 
 #### The `packaged_async_object<>` Type:
 
-The `packaged_async_object<>` type _`async-object`_ that is always default async-constructible. The `packaged_async_object<>` type stores a pack of arguments and in its defaulted `async_construct`, gives those arguments to the async_constructor of the nested _`async-object`_.
+The `packaged_async_object<>` type is an _`async-object`_ that is always default async-constructible. The `packaged_async_object<>` type stores a pack of arguments and in its defaulted `async_construct`, gives those arguments to the async_constructor of the nested _`async-object`_.
 
 `async_using()` and `make_async_tuple()` require a pack of default async-constructible _`async-object`_ s. The `packaged_async_object<>` type is used to make default async-constructible _`async-object`_ s that can be passed to `async_using()` and `make_async_tuple()`.
 
