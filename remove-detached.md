@@ -62,7 +62,7 @@ composed with sender adaptors into other operations and work most of the time, b
 data races that may only occur on failure-codepaths.
 
 The functionality previously provided by `std::execution::ensure_started()`, which allows eagerly starting
-an operation and then later observing the result, can be obtained by using facilities proposed by [P3149].
+an operation and then later observing the result, can be obtained by using facilities proposed by [@P3149R0].
 
 Instead of writing:
 ```c++
