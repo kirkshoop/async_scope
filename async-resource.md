@@ -384,7 +384,7 @@ using async_destruct_t = /*implementation-defined/*;
 ///   the async-object-storage for the destructed async-object
 /// @returns sender_of<set_value_t()>
 /**/
-inline static constexpr async_construct_t async_construct{};
+inline static constexpr async_destruct_t async_destruct{};
 ```
 
 #### Class diagram _`async-object`_
