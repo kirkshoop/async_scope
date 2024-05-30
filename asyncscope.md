@@ -533,7 +533,7 @@ If a sync context intends to ask for early completion of an async operation, the
 
 Principles that discourage blocking in the destructor:
 
-- Blocking must be explicit (exiting a sync scope is implicit -- and `shared_ptr` makes it even more scary as the destructor will potentially run at a different callstack and executino resource each time).
+- Blocking must be explicit (exiting a sync scope is implicit -- and `shared_ptr` makes it even more scary as the destructor will potentially run at a different callstack and execution resource each time).
 - Blocking must be grepable.
 - Blocking must be rare.
 - Blocking must be composable.
