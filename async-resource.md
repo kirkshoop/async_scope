@@ -801,6 +801,240 @@ The design in this paper is implemented, but is not used widely at this time (Ma
 
 The design in this paper has withstood the first round of feedback and is ready for a wider audience.
 
+Proposed Wording
+================
+
+
+Modify 
+
+[34.4]{.pnum} Header `<execution>` synopsis [exec.syn]{.sref}
+
+```diff
+struct schedule_t { @_see below_@ };
++  struct async_construct_t { @_see below_@ };
++  struct async_destruct_t { @_see below_@ };
+```
+
+```diff
+inline constexpr schedule_t schedule{};
++  inline constexpr async_construct_t async_construct{};
++  inline constexpr async_destruct_t async_destruct{};
+```
+
+```diff
++  template<class Obj>
++    concept async_object = @_see below_@;
+```
+
+Modify 
+
+[34.9.10]{.pnum} Sender factories [exec.factories]{.sref}
+
+::: add
+
+> [34.9.10.4]{.pnum} `execution::async_construct` [exec.async_construct]{.sref}
+> 
+> - [1]{.pnum} `async_construct` obtains a construct-sender ([async.ops]{.sref}) from an async-object.
+> 
+> - [2]{.pnum} The name `async_construct` denotes a customization point object. For a subexpression `obj`, the expression `async_construct(obj)` is expression-equivalent to:
+> 
+>    - [1]{.pnum} `obj.async_construct()` if that expression is valid.
+> 
+>       - _Mandates:_ The type of `obj.async_construct()` satisfies `sender`.
+> 
+>    - [2]{.pnum} Otherwise, `async_construct(obj)` is ill-formed.
+
+:::
+
+::: add
+
+> [34.9.10.5]{.pnum} `execution::async_destruct` [exec.async_destruct]{.sref}
+> 
+> - [1]{.pnum} `async_destruct` obtains a destruct-sender ([async.ops]{.sref}) from an async-object.
+> 
+> - [2]{.pnum} The name `async_destruct` denotes a customization point object. For a subexpression `obj`, the expression `async_destruct(obj)` is expression-equivalent to:
+> 
+>    - [1]{.pnum} `obj.async_destruct()` if that expression is valid. 
+> 
+>       - _Mandates:_ The type of `obj.async_destruct()` satisfies `sender`.
+> 
+>       - _Mandates:_ The type of `obj.async_destruct()` will not invoke the `set_error` completion.
+> 
+>    - [2]{.pnum} Otherwise, `async_destruct(obj)` is ill-formed.
+
+:::
+
+
+After
+
+> [34.6]{.pnum} Schedulers [exec.sched]
+
+::: add
+
+> [34.7]{.pnum} Async Objects [exec.obj]{.sref}
+> The `async_object` concept defines the requirements of an async-object type ([async.ops]{.sref}). `async_construct` and `async_destruct` are customization point objects that accept an async-object. A valid invocation of `async_construct` is an async-construct-expression. A valid invocation of `async_destruct` is an async-destruct-expression.
+> 
+
+```cpp
+  namespace std::execution {
+  
+  template<class _T, class _O, class _H, class _S>
+  concept __async_object_members = // @_exposition only_@
+    std::is_move_constructible_v<_T> &&
+    std::is_nothrow_move_constructible_v<_H> &&
+    !std::is_default_constructible_v<_O> &&
+    !std::is_move_constructible_v<_O> &&
+    !std::is_constructible_v<_O, const _O&> &&
+    std::is_nothrow_default_constructible_v<_S> &&
+    !std::is_move_constructible_v<_S> &&
+    !std::is_constructible_v<_S, const _S&>;
+  
+  template<class _S>
+  concept __async_destruct_result_valid = // @_exposition only_@
+     __single_typed_sender<_S> &&
+     sender_of<_S,  set_value_t()>;
+  
+  template<class _T>
+  concept async_object = 
+    requires (){
+      typename _T::object;
+      typename _T::handle;
+      typename _T::storage;
+    } &&
+    __async_object_members<_T, 
+      typename _T::object, 
+      typename _T::handle, 
+      typename _T::storage> &&
+    requires (const _T& __t_clv, typename _T::storage& __s_lv){
+      { async_destruct_t{}(__t_clv, __s_lv) }
+        ->  __nofail_sender;
+    } && 
+    __async_destruct_result_valid<async_destruct_result_t<_T>>;
+  
+  template<class _T, class... _An>
+  concept async_object_constructible_from = 
+    async_object<_T> &&
+    requires (
+      const _T& __t_clv, 
+      typename _T::storage& __s_lv, _An... __an){
+      { async_construct_t{}(__t_clv, __s_lv, __an...) } 
+        ->  sender_of< set_value_t(typename _T::handle)>;
+    };
+  }
+```
+
+> 
+> Let `Obj` denote the following exposition-only class:
+
+```cpp
+  struct @_aync-object_@ {
+    struct object { int v; };
+    using handle = object*;
+    struct storage { std::optional<object> o; };
+    static handle construct(storage* s, int v) noexcept {
+      s->o.emplace(v);
+      return handle{&s->o.value()};
+    }
+    using async_constructor = decltype(
+      then(just(std::declval<storage*>(), 0), &construct));
+    async_constructor async_construct(storage& s, int v) {
+      return then(just(&s, v), &construct);
+    }
+    static void destruct(storage* s) noexcept {
+      s->o.reset();
+    }
+    using async_destructor = decltype(then(just(std::declval<storage*>()), &destruct));
+    async_destructor async_destruct(storage& s) noexcept {
+      s.o.emplace();
+      return then(just(&s), &destruct);
+    }
+  };
+```
+
+> Let `Env` be the type of an execution environment and let `An...` be a template parameter pack of types of constructor arguments. Then:
+> 
+>   - [1]{.pnum} If `sender_in<async_construct_result_t<Obj, Obj::storage&, An...>, Env>` is satisfied, `sender-of-in<async_construct_result_t<Obj, Obj::storage&, An...>, Env, Obj::handle>` is also satisfied
+>
+>   - [2]{.pnum} If `sender_in<async_destruct_result_t<Obj, Obj::storage&>, Env>`  is satisfied, `sender-of-in<async_destruct_result_t<Obj, Obj::storage&>, Env>` is also satisfied
+> 
+> Let `Object` be the type `Obj::object`.
+> 
+>   - [1]{.pnum} If an `Object` object is moved after `async_construct` is invoked, the behavior is undefined.
+>
+>   - [2]{.pnum} If an `Object` object is destructed before `async_destruct` has completed, the behavior is undefined.
+>
+>   - [3]{.pnum} Library-provided `Object` types are non-movable.
+>
+> Let `Storage` be the type `Obj::storage`.
+> 
+>   - [1]{.pnum} If a `Storage` object is moved after `async_construct` is invoked, the behavior is undefined.
+>
+>   - [2]{.pnum} If a `Storage` object is destructed before `async_destruct` has completed, the behavior is undefined.
+>
+>   - [3]{.pnum} Library-provided `Storage` types are non-movable.
+>
+> Let `Handle` be the type `Obj::handle`.
+>
+>   - [1]{.pnum} None of a `Handle`’s copy constructor, destructor, equality comparison, or swap member functions shall exit via an exception.
+>
+>   - [2]{.pnum} If a `Handle` object is used before `async_construct` has completed, the behavior is undefined.
+>
+>   - [3]{.pnum} If a `Handle` object is used after `async_destruct` is started, the behavior is undefined.
+>
+>
+> [34.7.1]{.pnum} execution::async_using [exec.async_using]
+>
+> `async_using` produces a sender that will coordinate the construction and destruction of a pack of async-objects and transform the constructed async-objects into a new child asynchronous operation by passing a pack of handles for the constructed async-objects to a user-specified callable, which returns a new sender that is connected and started.
+>
+> The name `async_using` denotes a customization point object. For subexpressions `f`, and `objs...`, let `F` be the decayed type of `f`, let `Objs...` be `decltype((objs))...`. If each type in `Objs...` does not satisfy async_object or if `F` does not satisfy movable-value, the expression `async_using(f, objs...)` is ill-formed.
+>
+> Otherwise, the expression `async_using(f, objs...)` is expression-equivalent to:
+>
+
+```cpp
+  transform_sender(
+  query-or-default(get_domain, sch, default_domain()),
+  make-sender(async_using, f, objs...));
+```
+
+> Let `out_sndr` and `env` be subexpressions such that `OutSndr` is `decltype((out_sndr))`. If `sender-for<OutSndr, async_using_t>` is false, then the expressions `async_using.transform_env(out_sndr, env)` and `async_using.transform_sender(out_sndr, env)` are ill-formed; otherwise:
+>
+> `async_using.transform_env(out_sndr, env)` is equivalent to:
+
+```cpp
+auto&& [ign1, sch, ign2] = out_sndr;
+return JOIN-ENV(SCHED-ENV(sch), FWD-ENV(env));
+```
+
+> `async_using.transform_sender(out_sndr, env)` is equivalent to:
+
+```cpp
+auto&& [ign, sch, sndr] = out_sndr;
+return let_value(
+  schedule(sch),
+  [sndr = std::forward_like<OutSndr>(sndr)]() mutable {
+    return std::move(sndr);
+  });
+```
+
+> Let the subexpression `constructs...` denote the results of the invocation of `async_construct(objs)...`
+>
+> Let the subexpression `handles...` denote the completions of all nested `constructs...` asynchronous operations
+>
+> Let the subexpression `destructs...` denote the reversed results of the invocation of `async_destruct(objs)...`
+>
+> Let the subexpression `out_sndr` denote the result of the invocation `async_using(f, objs...)` or an object copied or moved from such, and let the subexpression `rcvr` denote a receiver such that the expression `connect(out_sndr, rcvr)` is well-formed. The expression `connect(out_sndr, rcvr)` has undefined behavior unless it creates an asynchronous operation ([async.ops]) that, when started:
+>
+>   - makes its completion dependent on the completion of the `destructs...` asynchronous operations,
+>   - starts all nested `constructs...` asynchronous operations,
+>   - invokes `f` with `handles...` when all nested `constructs...` asynchronous operations complete with `handles...`,
+>   - makes the start of all nested `destructs...` asynchronous operations dependent on the error and stopped completions of any nested `constructs...` asynchronous operation
+>   - makes the start of all nested `destructs...` asynchronous operations dependent on the completion of a sender returned by `f`
+>
+
+
+:::
+
 ---
 references:
   - id: asyncobjectgodbolt
