@@ -542,6 +542,166 @@ Principles that discourage blocking in the destructor:
 
 Every _`async-function`_ will join with non-blocking primitives and `sync_wait()` will be used to block some composition of those non-blocking primitives. The _`async-function`_ being stopped would complete before any _`async-resource`_ it is using completes -- without any blocking.
 
+Alternative design
+==================
+
+This section describes an alternative design that would break down `async_scope` into smaller parts, providing better composability and finer-grained control.
+
+## Definitions
+```cpp
+struct async_scope {
+    async_scope();
+    ~async_scope();
+    async_scope(const async_scope&) = delete;
+    async_scope(async_scope&&) = delete;
+    async_scope& operator=(const async_scope&) = delete;
+    async_scope& operator=(async_scope&&) = delete;
+
+    template <sender S>
+    @_nest-sender_@<S> nest(S&& snd);
+
+    template <sender S>
+    [[nodiscard]]
+    @_on-empty-sender_@<S> when_empty(S&& snd) const noexcept;
+};
+```
+
+The meaning of `nest()` and `when_empty()` is kept the same.
+All other methods that are absent in this alternative design can be built on top of the remaining functionality.
+
+### `spawn()`
+
+If `scope` is an object of type `async_scope`, then `scope.spawn(snd)` is equivalent with:
+```c++
+start_detached(scope.nest(snd));
+```
+
+### `spawn_future()`
+
+If `scope` is an object of type `async_scope`, then `scope.spawn_future(snd)` is equivalent with:
+```c++
+ensure_started(scope.nest(snd));
+```
+
+### `on_empty()`
+
+If `scope` is an object of type `async_scope`, then `scope.on_empty()` is equivalent with:
+```c++
+scope.when_empty(just());
+```
+
+### Cancellation
+
+In this alternative, `async_scope` doesn't provide direct support for cancellation.
+However, this can be added on top.
+If `scope` is an object of type `async_scope`, and `stoken` is a stop token, then we can build cancellation in with the following:
+```c++
+scope.nest(stop_when(snd, stoken))
+
+```
+
+In this context, `stop_when()` is an algorithm that injects the given stop token in the environment used by the given sender when it is started.
+It allows cancelling the work represented by `snd`.
+
+As one can see, cancellation behavior can be built entirely on top of `async_scope`; it doesn't need to be a core part of it.
+
+## Composability
+
+### Multiple `async_scope` objects
+
+There are cases in which one needs to perform some work within the blessing of multiple `async_scope` objects.
+For example, a work that uses resources from two different parts of the system, and each the scope of each resource is guarded by an `async_scope` object.
+
+```c++
+struct foo {
+    async_scope scope;
+    foo_data data;
+};
+
+struct bar {
+    async_scope scope;
+    bar_data data;
+};
+void reconcile(foo_data* fd, bar_data* bd);
+
+foo f;
+bar b;
+sender auto base_work = just(&f.data, &b.data) | then(reconcile);
+sender auto safe_work = f.scope.nest(b.scope.nest(std::move(base_work)));
+start_detached(std::move(safe_work));
+// ...
+this_thread::sync_wait(f.scope.when_empty(b.scope.when_empty(just())));
+```
+
+In the previous example, if `f` or `b` objects cannot be destroyed while the `reconcile` function executes.
+Using scopes for both `f` and `b` are needed, as `reconcile` needs to access both resources (and the resources might have different lifetimes).
+
+### Multiple scopes, a single stop source
+
+Removing the stop functionality from `async_scope` allows us to use the same stop source (and stop token) to serve multiple `async_scope` objects.
+
+```c++
+struct foo {
+    async_scope scope;
+    foo_data data;
+};
+
+struct bar {
+    async_scope scope;
+    bar_data data;
+};
+void reconcile(foo_data* fd, bar_data* bd);
+
+in_place_stop_source ssource;
+foo f;
+bar b;
+sender auto base_work = just(&f.data, &b.data) | then(reconcile);
+sender auto safe_work = f.scope.nest(b.scope.nest(stop_when(std::move(base_work), ssource.get_token()));
+start_detached(std::move(safe_work));
+// ...
+ssource.request_stop();
+this_thread::sync_wait(f.scope.when_empty(b.scope.when_empty(just())));
+```
+
+### `async_scope` and async mutexes
+
+An asynchronous mutex might have a stripped down functionality, focusing only on the core logic for implementing mutual exclusion between (arbitrarily complex) senders.
+To make it safe to use, it needs to be composed with an `async_scope` object.
+
+```c++
+auto sender complex_work(work_item);
+
+async_scope scope;
+async_mutex mtx;
+for ( auto item: items ) {
+    start_detached(scope.nest(mutex.lock(complex_work(item))));
+}
+// ...
+this_thread::sync_wait(scope.when_empty(just()));
+
+```
+
+In the previous example, we start a dynamic number of work items, and we make sure that they are all executed serially.
+The complex work might span over multiple execution contexts.
+
+## Evaluation
+
+Pros:
+
+- simpler design
+- better separation of concerns
+- better integration with [@P2300R5] `start_detached` and `ensure_started` (reuse functionality, not provide similar functionality)
+- some efficiency gains in cases where stop sources are not needed, or can be reused
+- better control on which stop source needs to be used
+
+Cons:
+
+- users might have to compose several smaller function to achieve common use cases
+- needs new `stop_when` algorithm, which is not part of [@P2300R5]
+- users might forgot to add a stop source to prevent race conditions in cases in which new work is started within an `async_scope` while `when_empty` notifies that `async_scope` is empty
+
+
+
 Naming
 ======
 
