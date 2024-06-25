@@ -569,7 +569,7 @@ alternatives: `wrap()`
 
 ## `spawn()`
 
-This provides a way to start a sender that produces `void` and add to the count that `counting_scope` maintains of nested and spwned senders. This allocates, connects and starts the given sender.
+This provides a way to start a sender that produces `void` and add to the count that `counting_scope` maintains of nested and spawned senders. This allocates, connects and starts the given sender.
 
 It would be good for the name to indicate that it is an expensive operation.
 
